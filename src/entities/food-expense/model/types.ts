@@ -45,4 +45,14 @@ export interface FoodExpense {
 
   /** 연결된 냉장고 재료/배치의 식단 사용 이력 유무 — route에서 조립한다 (장보기 전용) */
   has_meal_usage?: boolean;
+
+  /** 이 행이 만든 구매분의 재고 상태 — route에서 조립한다 (장보기 전용, 연결이 끊겼으면 null) */
+  stock?: FoodExpenseStock | null;
+}
+
+/** 장보기 행 하나가 만든 구매분의 남은 양과 끝 기록 합 */
+export interface FoodExpenseStock {
+  remaining: number;
+  eaten: number;
+  discarded: number;
 }

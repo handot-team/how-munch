@@ -18,6 +18,7 @@ import { buildCumulativeSeries, getDayCount, sumSpentByScope } from '../lib/budg
 import { BudgetCumulativeChart } from './BudgetCumulativeChart';
 import { BudgetScopeRow } from './BudgetScopeRow';
 import { BudgetUnsetRow } from './BudgetUnsetRow';
+import { DiscardedExpenseRow } from './DiscardedExpenseRow';
 import { WeeklyStats } from './WeeklyStats';
 
 interface BudgetScreenProps {
@@ -93,6 +94,8 @@ export function BudgetScreen({ onOpenEdit, householdId, yearMonth }: BudgetScree
             </section>
 
             <WeeklyStats series={series} yearMonth={yearMonth} />
+
+            <DiscardedExpenseRow householdId={householdId} yearMonth={yearMonth} />
 
             {hasBudget ? (
               <section className="divide-y rounded-xl border bg-white px-4 py-2">

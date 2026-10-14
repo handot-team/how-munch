@@ -66,6 +66,10 @@ export interface FridgeItemWithBatches extends FridgeItem {
    * g/kg 'used'처럼 meal_batch_usages 행이 없는 사용까지 포함한다.
    */
   has_meal_usage?: boolean;
+  /** 재료를 처음 입력한 가구원 */
+  created_by?: string | null;
+  /** 입력한 가구원의 닉네임 — route에서 조립한다 */
+  created_by_nickname?: string | null;
 }
 
 /** 끝 기록 종류 — 다 먹음 / 버림 */

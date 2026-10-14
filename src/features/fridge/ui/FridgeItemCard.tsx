@@ -5,6 +5,7 @@ import { overlay } from 'overlay-kit';
 
 import { stackFlowActions } from '@/apps/stackflow/StackFlow';
 
+import { useUserSuspenseQuery } from '@/commons/api/auth/queries';
 import { cn } from '@/commons/lib';
 import { Activity, ProgressBar, SwipeAction } from '@/commons/ui';
 
@@ -39,6 +40,12 @@ export function FridgeItemCard({
   onOpenSheet,
   onAddBatch,
 }: FridgeItemCardProps) {
+  const { data: user } = useUserSuspenseQuery();
+  // 꼬리표형: 누가 넣은 재료인지 카드 첫 화면에 칩으로 보인다. 입력한 사람이지 산 사람은 아니다.
+  const creatorLabel = item.created_by
+    ? `${item.created_by === user.id ? '나' : (item.created_by_nickname ?? '가구원')} 입력`
+    : null;
+
   const activeBatches = item.fridge_item_batches.filter(
     (b) => !b.deleted_at && Number(b.quantity) > 0,
   );
@@ -154,7 +161,7 @@ export function FridgeItemCard({
               </span>
             </Activity>
 
-            <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex min-w-0 flex-col">
               <Activity visible={!!item.brand}>
                 <span className="truncate text-[11px] text-gray-400">{item.brand}</span>
               </Activity>
@@ -167,6 +174,13 @@ export function FridgeItemCard({
                 {item.name}
               </span>
             </div>
+
+            <Activity visible={!!creatorLabel}>
+              <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
+                {creatorLabel}
+              </span>
+            </Activity>
+            <span className="flex-1" aria-hidden />
 
             <div className="flex shrink-0 items-center gap-1.5">
               <span

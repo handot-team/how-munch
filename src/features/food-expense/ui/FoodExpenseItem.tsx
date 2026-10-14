@@ -7,6 +7,14 @@ import { DINING_EXPENSE_KIND_LABEL, isDiningExpenseKind } from '@/entities/dinin
 import { getDiningKindEmoji, type FoodExpense } from '@/entities/food-expense';
 import { formatIngredientAmount } from '@/entities/ingredient';
 
+import { buildStockTags, type StockTagTone } from '../lib/stockTag';
+
+const STOCK_TAG_CLASS: Record<StockTagTone, string> = {
+  left: 'bg-emerald-50 text-emerald-700',
+  done: 'bg-gray-100 text-gray-500',
+  discarded: 'bg-red-50 text-red-600',
+};
+
 interface FoodExpenseItemProps {
   expense: FoodExpense;
   /** 장보기 행의 카테고리 라벨 — 외식비는 kind 라벨(식당/포장·배달)이 이 자리를 대신한다 */
@@ -46,6 +54,8 @@ export function FoodExpenseItem({
   const metaItems = [amountLabel, expense.store].filter(Boolean) as string[];
   // 영수증에서 가격을 못 읽은 장보기 줄은 0원으로 저장된다. 합계에는 0원으로 들어가지만 행에서는 '금액 모름'으로 보인다.
   const isPriceUnknown = expense.kind === 'grocery' && expense.price === 0;
+  // 꼬리표형: 이 장보기로 산 재료가 냉장고에서 어떻게 됐는지 메타 줄 끝에 붙인다.
+  const stockTags = buildStockTags(expense);
 
   return (
     <>
@@ -92,6 +102,17 @@ export function FoodExpenseItem({
           <span key={`${expense.id}-meta-${index}`} className="truncate">
             {meta}
             {index < metaItems.length - 1 ? <span className="ml-2 text-gray-300">|</span> : null}
+          </span>
+        ))}
+        {stockTags.map((tag) => (
+          <span
+            key={`${expense.id}-stock-${tag.tone}`}
+            className={cn(
+              'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold',
+              STOCK_TAG_CLASS[tag.tone],
+            )}
+          >
+            {tag.label}
           </span>
         ))}
       </div>

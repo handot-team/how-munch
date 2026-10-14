@@ -1,4 +1,9 @@
-export type { FoodExpense, FoodExpenseFilterKind, FoodExpenseKind } from './model/types';
+export type {
+  FoodExpense,
+  FoodExpenseFilterKind,
+  FoodExpenseKind,
+  FoodExpenseStock,
+} from './model/types';
 export {
   FOOD_EXPENSE_FILTER_KINDS,
   getDiningKindEmoji,

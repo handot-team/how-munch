@@ -37,7 +37,26 @@ export const GET = withAuth(async (req: NextRequest, { supabase }) => {
     return apiResponse.INTERNAL_ERROR();
   }
 
-  return apiResponse.OK(data ?? []);
+  const items = (data ?? []) as { created_by?: string | null }[];
+
+  // 꼬리표형: 카드에 입력자 칩을 붙이려고 입력한 가구원의 닉네임을 함께 싣는다.
+  const creatorIds = [
+    ...new Set(items.map((item) => item.created_by).filter((id): id is string => !!id)),
+  ];
+  const { data: creators, error: creatorsError } = creatorIds.length
+    ? await supabase.from('profiles').select('user_id, nickname').in('user_id', creatorIds)
+    : { data: [] as { user_id: string; nickname: string }[], error: null };
+
+  if (creatorsError) return apiResponse.INTERNAL_ERROR();
+
+  const nicknameByUserId = new Map((creators ?? []).map((row) => [row.user_id, row.nickname]));
+
+  return apiResponse.OK(
+    items.map((item) => ({
+      ...item,
+      created_by_nickname: item.created_by ? (nicknameByUserId.get(item.created_by) ?? null) : null,
+    })),
+  );
 });
 
 /** POST /api/fridge — 냉장고 아이템 + 첫 배치 동시 추가 */

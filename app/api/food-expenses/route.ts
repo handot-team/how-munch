@@ -8,7 +8,7 @@ import { apiResponse } from '@/commons/lib/http/apiResponse';
 import { dispatchHouseholdNotification } from '@/commons/lib/http/dispatchHouseholdNotification';
 import { type Database, type Page, type PageInfo } from '@/commons/model/types';
 
-import { type FoodExpense } from '@/entities/food-expense';
+import { type FoodExpense, type FoodExpenseStock } from '@/entities/food-expense';
 
 type DiningExpenseRow = Database['public']['Tables']['dining_expenses']['Row'];
 
@@ -116,8 +116,48 @@ export const GET = withAuth(async (req: NextRequest, { supabase }) => {
       .filter((id): id is string => id !== null),
   );
 
+  // 꼬리표형: 장보기 행이 만든 구매분의 남은 양과 끝 기록(먹음/버림)을 함께 싣는다.
+  // 냉장고에서 재료를 지워 구매분이 사라졌으면 꼬리표를 붙이지 않는다.
+  const [batchResult, endRecordResult] = await Promise.all([
+    fridgeBatchIds.length
+      ? supabase
+          .from('fridge_item_batches')
+          .select('id, quantity')
+          .in('id', fridgeBatchIds)
+          .is('deleted_at', null)
+      : Promise.resolve({ data: [] as { id: string; quantity: number }[], error: null }),
+    fridgeBatchIds.length
+      ? supabase
+          .from('fridge_batch_end_records')
+          .select('batch_id, kind, amount')
+          .in('batch_id', fridgeBatchIds)
+          .is('undone_at', null)
+      : Promise.resolve({
+          data: [] as { batch_id: string; kind: string; amount: number }[],
+          error: null,
+        }),
+  ]);
+
+  if (batchResult.error || endRecordResult.error) return apiResponse.INTERNAL_ERROR();
+
+  const stockByBatchId = new Map<string, FoodExpenseStock>(
+    (batchResult.data ?? []).map((batch) => [
+      batch.id,
+      { remaining: Number(batch.quantity), eaten: 0, discarded: 0 },
+    ]),
+  );
+  for (const record of endRecordResult.data ?? []) {
+    const stock = stockByBatchId.get(record.batch_id);
+    if (!stock) continue;
+    if (record.kind === 'discarded') stock.discarded += Number(record.amount);
+    else stock.eaten += Number(record.amount);
+  }
+
   const contents: FoodExpense[] = expenses.map((expense) => ({
     ...expense,
+    stock: expense.linked_fridge_batch_id
+      ? (stockByBatchId.get(expense.linked_fridge_batch_id) ?? null)
+      : null,
     has_meal_usage:
       (!!expense.linked_fridge_item_id && usedFridgeItemIds.has(expense.linked_fridge_item_id)) ||
       (!!expense.linked_fridge_batch_id && usedFridgeBatchIds.has(expense.linked_fridge_batch_id)),
