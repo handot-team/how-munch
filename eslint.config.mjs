@@ -291,6 +291,16 @@ const eslintConfig = defineConfig([
     },
   },
 
+  // 가짜 Supabase 서버(mock/) — 앱 밖 Node 개발 도구라 FSD 경로 규칙과 console 제한을 받지 않는다
+  {
+    files: ['mock/**/*'],
+    rules: {
+      'fsd/no-relative-imports': 'off',
+      'no-console': 'off',
+      'no-nested-ternary': 'off',
+    },
+  },
+
   // Ignores
   globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts']),
 ]);
