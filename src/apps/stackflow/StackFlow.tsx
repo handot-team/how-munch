@@ -367,7 +367,13 @@ function ProfileEditActivity() {
 }
 
 function NotificationActivity() {
-  return <NotificationScreen />;
+  const { push } = useActions();
+
+  function openBudget(householdId: string, yearMonth: string) {
+    push('BudgetActivity', { householdId, yearMonth });
+  }
+
+  return <NotificationScreen onOpenBudget={openBudget} />;
 }
 
 function NotificationSettingsActivity() {
@@ -526,10 +532,10 @@ function BudgetActivity({
 }) {
   const { pop, push } = useActions();
 
-  function openEdit() {
+  function openEdit(yearMonth: string) {
     push('BudgetEditActivity', {
       householdId: params.householdId,
-      yearMonth: params.yearMonth,
+      yearMonth,
     });
   }
 

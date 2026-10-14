@@ -2,6 +2,7 @@ export type {
   Budget,
   BudgetAmountMap,
   BudgetDailyPoint,
+  BudgetMonthReport,
   BudgetScope,
   DiscardedFoodExpenseSummary,
 } from './model/types';

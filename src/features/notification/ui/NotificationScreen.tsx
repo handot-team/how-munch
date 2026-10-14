@@ -7,6 +7,8 @@ import { ko } from 'date-fns/locale';
 import { useUserSuspenseQuery } from '@/commons/api/auth/queries';
 import { Button, EmptyState } from '@/commons/ui';
 
+import { type MonthlyClosedPayload, type NotificationItem } from '@/entities/notification';
+
 import {
   useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
@@ -17,8 +19,23 @@ function formatNotificationDate(value: string) {
   return format(new Date(value), 'M월 d일 HH:mm', { locale: ko });
 }
 
+/**
+ * 월 마감 알림이면 열 달을 돌려준다. 다른 알림이나 payload가 비었으면 null.
+ */
+function resolveClosedMonth(notification: NotificationItem): MonthlyClosedPayload | null {
+  if (notification.type !== 'monthly_closed') return null;
+  const payload = notification.payload as Partial<MonthlyClosedPayload> | null;
+  if (!payload?.householdId || !payload.yearMonth) return null;
+  return { householdId: payload.householdId, yearMonth: payload.yearMonth };
+}
+
+interface NotificationScreenProps {
+  /** 월 화면형: 마감 알림에서 그 달 예산 현황 열기 */
+  onOpenBudget: (householdId: string, yearMonth: string) => void;
+}
+
 /** 알림 목록 화면 */
-export function NotificationScreen() {
+export function NotificationScreen({ onOpenBudget }: NotificationScreenProps) {
   const { data: user } = useUserSuspenseQuery();
   const { data: notifications = [], isLoading } = useNotificationsQuery(user.id);
   const markReadMutation = useMarkNotificationReadMutation(user.id);
@@ -71,6 +88,7 @@ export function NotificationScreen() {
             <ul className="space-y-2">
               {notifications.map((notification) => {
                 const isUnread = !notification.read_at;
+                const closedMonth = resolveClosedMonth(notification);
 
                 return (
                   <li key={notification.id}>
@@ -88,6 +106,25 @@ export function NotificationScreen() {
                         ) : null}
                       </div>
                       <p className="text-sm text-gray-600">{notification.description}</p>
+                      {closedMonth ? (
+                        <span
+                          role="link"
+                          tabIndex={0}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            markNotificationRead(notification.id, isUnread);
+                            onOpenBudget(closedMonth.householdId, closedMonth.yearMonth);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key !== 'Enter') return;
+                            event.stopPropagation();
+                            onOpenBudget(closedMonth.householdId, closedMonth.yearMonth);
+                          }}
+                          className="mt-1.5 inline-block text-sm font-semibold text-emerald-600"
+                        >
+                          {Number(closedMonth.yearMonth.slice(5, 7))}월 예산 현황 보기
+                        </span>
+                      ) : null}
                       <p className="mt-2 text-xs text-gray-400">
                         {formatNotificationDate(notification.created_at)}
                       </p>

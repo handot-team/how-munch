@@ -41,3 +41,12 @@ export interface DiscardedFoodExpenseSummary {
   knownAmount: number;
   unknownCount: number;
 }
+
+/**
+ * 월 화면형 예산 현황의 가게별 합계와 가구원별 입력 건수.
+ * 외식비는 '식당·배달' 한 줄로 묶고, 가구원별로는 금액이 아닌 입력 건수만 센다.
+ */
+export interface BudgetMonthReport {
+  stores: { label: string; amount: number }[];
+  members: { userId: string; nickname: string; count: number }[];
+}

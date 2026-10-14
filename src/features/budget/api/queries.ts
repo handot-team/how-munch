@@ -6,6 +6,7 @@ import {
   budgetKeys,
   type Budget,
   type BudgetDailyPoint,
+  type BudgetMonthReport,
   type DiscardedFoodExpenseSummary,
 } from '@/entities/budget';
 
@@ -51,6 +52,23 @@ export function useDiscardedFoodExpenseQuery(householdId: string | null, yearMon
       householdId && yearMonth
         ? () =>
             apiClient.get<DiscardedFoodExpenseSummary>('/api/budgets/discarded', {
+              householdId,
+              yearMonth,
+            })
+        : skipToken,
+  });
+}
+
+/**
+ * @description 월 화면형 예산 현황의 가게별 합계와 가구원별 입력 건수 조회.
+ */
+export function useBudgetMonthReportQuery(householdId: string | null, yearMonth: string | null) {
+  return useQuery({
+    queryKey: budgetKeys.monthReport(householdId ?? '', yearMonth ?? ''),
+    queryFn:
+      householdId && yearMonth
+        ? () =>
+            apiClient.get<BudgetMonthReport>('/api/budgets/month-report', {
               householdId,
               yearMonth,
             })

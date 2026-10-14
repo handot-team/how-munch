@@ -2,6 +2,7 @@ export type {
   ExpirySoonPayload,
   FridgeItemAddedPayload,
   MealAddedPayload,
+  MonthlyClosedPayload,
   NotificationItem,
   NotificationPreferenceRow,
   NotificationPushSubscriptionRow,

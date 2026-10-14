@@ -14,7 +14,8 @@ export type NotificationType =
   | 'meal_added'
   | 'dining_expense_added'
   | 'budget_exceeded'
-  | 'weekly_expense';
+  | 'weekly_expense'
+  | 'monthly_closed';
 export type NotificationStatus = NotificationRow['status'];
 
 export interface ExpirySoonPayload {
@@ -54,6 +55,13 @@ export interface BudgetExceededPayload {
   threshold: 50 | 100;
   budgetAmount: number;
   spentAmount: number;
+}
+
+/** 월 화면형: 지난달 식비 마감 알림. 누르면 그 달 예산 현황을 연다. */
+export interface MonthlyClosedPayload {
+  householdId: string;
+  /** 마감한 달 'YYYY-MM' */
+  yearMonth: string;
 }
 
 export interface WeeklyExpensePayload {
