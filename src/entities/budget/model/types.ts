@@ -32,3 +32,12 @@ export interface BudgetDailyPoint {
   kind: string;
   total: number;
 }
+
+/**
+ * 한 달의 버린 식비. 끝 기록에서 '버림'으로 남긴 것만 센다.
+ * 금액은 버린 시점의 장보기 금액 ÷ 산 수량이고, 가격을 모르는 줄은 금액 대신 건수로 따로 센다.
+ */
+export interface DiscardedFoodExpenseSummary {
+  knownAmount: number;
+  unknownCount: number;
+}

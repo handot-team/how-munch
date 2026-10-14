@@ -67,3 +67,23 @@ export interface FridgeItemWithBatches extends FridgeItem {
    */
   has_meal_usage?: boolean;
 }
+
+/** 끝 기록 종류 — 다 먹음 / 버림 */
+export type FridgeBatchEndKind = 'eaten' | 'discarded';
+
+/** 구매분 끝 기록 — 일부나 전부를 다 먹음/버림으로 끝낸 기록. 되돌리면 undone_at이 찍힌다. */
+export interface FridgeBatchEndRecord {
+  id: string;
+  household_id: string;
+  fridge_item_id: string;
+  batch_id: string;
+  kind: FridgeBatchEndKind;
+  amount: number;
+  /** 끝낸 양의 금액(원). 가격을 모르면 null */
+  price_amount: number | null;
+  /** 집계 기준일 'YYYY-MM-DD' (한국 날짜) */
+  ended_on: string;
+  created_by: string | null;
+  created_at: string;
+  undone_at: string | null;
+}

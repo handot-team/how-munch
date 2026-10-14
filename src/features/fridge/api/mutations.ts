@@ -3,7 +3,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/commons/lib';
 import { Toast } from '@/commons/ui';
 
-import { fridgeItemKeys, type FridgeItem, type FridgeItemBatch } from '@/entities/fridge-item';
+import { budgetKeys } from '@/entities/budget';
+import { foodExpenseKeys } from '@/entities/food-expense';
+import {
+  fridgeItemKeys,
+  type FridgeBatchEndKind,
+  type FridgeItem,
+  type FridgeItemBatch,
+} from '@/entities/fridge-item';
 import { mealKeys } from '@/entities/meal';
 
 import { type CategoryExpiryDefaultRow } from './queries';
@@ -203,6 +210,48 @@ export function useUpsertFridgePreferencesMutation() {
     },
     onError: (error) => {
       Toast.error(error.message);
+    },
+  });
+}
+
+interface RecordFridgeBatchEndInput {
+  batchId: string;
+  kind: FridgeBatchEndKind;
+  amount: number;
+}
+
+/**
+ * @description 구매분 하나를 다 먹음/버림으로 끝낸다.
+ * 재고 수량, 식비 행 꼬리표, 버린 식비가 함께 바뀌므로 세 목록을 모두 다시 읽는다.
+ */
+export function useRecordFridgeBatchEndMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: RecordFridgeBatchEndInput) =>
+      apiClient.post<{ id: string }>('/api/fridge/end-records', input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: fridgeItemKeys.all });
+      queryClient.invalidateQueries({ queryKey: mealKeys.fridgeItemsAll });
+      queryClient.invalidateQueries({ queryKey: foodExpenseKeys.all });
+      queryClient.invalidateQueries({ queryKey: budgetKeys.all });
+    },
+  });
+}
+
+/**
+ * @description 끝 기록 하나를 되돌린다(구매분 수량 복구).
+ */
+export function useUndoFridgeBatchEndMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (recordId: string) => apiClient.delete(`/api/fridge/end-records?id=${recordId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: fridgeItemKeys.all });
+      queryClient.invalidateQueries({ queryKey: mealKeys.fridgeItemsAll });
+      queryClient.invalidateQueries({ queryKey: foodExpenseKeys.all });
+      queryClient.invalidateQueries({ queryKey: budgetKeys.all });
     },
   });
 }

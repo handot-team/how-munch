@@ -2,7 +2,12 @@ import { skipToken, useQuery } from '@tanstack/react-query';
 
 import { apiClient } from '@/commons/lib';
 
-import { budgetKeys, type Budget, type BudgetDailyPoint } from '@/entities/budget';
+import {
+  budgetKeys,
+  type Budget,
+  type BudgetDailyPoint,
+  type DiscardedFoodExpenseSummary,
+} from '@/entities/budget';
 
 /**
  * @description 해당 월 예산 조회. row가 없는 scope는 "미설정"이며 진행바를 숨긴다.
@@ -29,6 +34,23 @@ export function useBudgetDailySeriesQuery(householdId: string | null, yearMonth:
       householdId && yearMonth
         ? () =>
             apiClient.get<BudgetDailyPoint[]>('/api/budgets/daily-series', {
+              householdId,
+              yearMonth,
+            })
+        : skipToken,
+  });
+}
+
+/**
+ * @description 그 달(버린 날 기준)의 버린 식비. 금액을 아는 것의 합과 금액 모름 건수를 따로 받는다.
+ */
+export function useDiscardedFoodExpenseQuery(householdId: string | null, yearMonth: string | null) {
+  return useQuery({
+    queryKey: budgetKeys.discarded(householdId ?? '', yearMonth ?? ''),
+    queryFn:
+      householdId && yearMonth
+        ? () =>
+            apiClient.get<DiscardedFoodExpenseSummary>('/api/budgets/discarded', {
               householdId,
               yearMonth,
             })

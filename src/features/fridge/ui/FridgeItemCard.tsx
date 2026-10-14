@@ -1,20 +1,20 @@
 'use client';
 
-import { AlertTriangle, Trash2 } from 'lucide-react';
+import { AlertTriangle, Check } from 'lucide-react';
 import { overlay } from 'overlay-kit';
 
 import { stackFlowActions } from '@/apps/stackflow/StackFlow';
 
 import { cn } from '@/commons/lib';
-import { Activity, DeleteConfirmBottomSheet, ProgressBar, SwipeAction, Toast } from '@/commons/ui';
+import { Activity, ProgressBar, SwipeAction } from '@/commons/ui';
 
 import { type FridgeItemWithBatches } from '@/entities/fridge-item';
 import { formatIngredientAmount } from '@/entities/ingredient';
 
-import { useDeleteFridgeItemMutation, useDiscardFridgeItemMutation } from '../api/mutations';
 import { getDaysUntilExpiry } from '../lib/expiry';
 
 import { ExpiryBadge } from './ExpiryBadge';
+import { FridgeEndRecordBottomSheet } from './FridgeEndRecordBottomSheet';
 
 interface FridgeItemCardProps {
   item: FridgeItemWithBatches;
@@ -39,9 +39,6 @@ export function FridgeItemCard({
   onOpenSheet,
   onAddBatch,
 }: FridgeItemCardProps) {
-  const discardMutation = useDiscardFridgeItemMutation();
-  const deleteMutation = useDeleteFridgeItemMutation();
-
   const activeBatches = item.fridge_item_batches.filter(
     (b) => !b.deleted_at && Number(b.quantity) > 0,
   );
@@ -74,49 +71,31 @@ export function FridgeItemCard({
     .map((b) => ({ batch: b, days: getDaysUntilExpiry(b.expiry_date!) }))
     .sort((a, b) => a.days - b.days)[0];
 
-  // 식단 사용 이력은 dish_ingredients 기준(has_meal_usage)이 완전한 출처다.
-  // g/kg 'used'처럼 meal_batch_usages 행이 없는 사용도 소진 처리 대상에 포함한다.
-  const hasUsage = item.has_meal_usage === true || (item.meal_batch_usages ?? []).length > 0;
+  function openSubdivide() {
+    stackFlowActions.push('FridgeItemSubdivideActivity', {
+      fridgeItemId: item.id,
+      itemName: item.name,
+      totalCount: item.total_count,
+      unit: item.unit,
+      batches: item.fridge_item_batches.filter((b) => !b.deleted_at),
+    });
+  }
 
-  function openDeleteConfirm() {
+  // 휴지통 대신 끝 기록 시트를 연다. 재료 삭제는 재료 수정 화면에만 둔다.
+  // 삭제는 장보기 행의 냉장고 연결까지 지워서, 먹거나 버린 기록이 남지 않았다.
+  function openEndRecordSheet() {
     overlay.open(({ isOpen, close, unmount }) => {
       function closeSheet() {
         close();
         window.setTimeout(unmount, 200);
       }
 
-      function confirmAction() {
-        closeSheet();
-        if (hasUsage) {
-          discardMutation.mutate(item.id, {
-            onSuccess: () => Toast.success('재고를 전부 소진 처리했습니다'),
-            onError: (error) =>
-              Toast.error(
-                error instanceof Error ? error.message : '소진 처리 중 오류가 발생했습니다',
-              ),
-          });
-        } else {
-          deleteMutation.mutate(item.id, {
-            onSuccess: () => Toast.success('재료를 삭제했습니다'),
-            onError: (error) =>
-              Toast.error(error instanceof Error ? error.message : '삭제 중 오류가 발생했습니다'),
-          });
-        }
-      }
-
       return (
-        <DeleteConfirmBottomSheet
+        <FridgeEndRecordBottomSheet
           open={isOpen}
           onClose={closeSheet}
-          onConfirm={confirmAction}
-          title={hasUsage ? '재고를 전부 소진 처리할까요?' : '재료를 삭제하시겠습니까?'}
-          description={
-            hasUsage
-              ? '식단에 사용된 기록은 유지됩니다.'
-              : '재료와 모든 재고가 삭제되며 복구할 수 없습니다.'
-          }
-          confirmLabel={hasUsage ? '전부 소진' : '삭제'}
-          isPending={discardMutation.isPending || deleteMutation.isPending}
+          item={item}
+          onSubdivide={openSubdivide}
         />
       );
     });
@@ -124,10 +103,11 @@ export function FridgeItemCard({
 
   const leftSwipeRightActions = [
     {
-      id: 'delete',
-      icon: <Trash2 className="size-4" />,
-      className: 'bg-red-500',
-      onPress: openDeleteConfirm,
+      id: 'end-record',
+      icon: <Check className="size-4" />,
+      label: '끝 기록',
+      className: 'bg-emerald-500',
+      onPress: openEndRecordSheet,
     },
   ];
 
@@ -136,14 +116,7 @@ export function FridgeItemCard({
       id: 'subdivide',
       label: '소분',
       className: 'bg-indigo-500',
-      onPress: () =>
-        stackFlowActions.push('FridgeItemSubdivideActivity', {
-          fridgeItemId: item.id,
-          itemName: item.name,
-          totalCount: item.total_count,
-          unit: item.unit,
-          batches: item.fridge_item_batches.filter((b) => !b.deleted_at),
-        }),
+      onPress: openSubdivide,
     },
     {
       id: 'add-batch',

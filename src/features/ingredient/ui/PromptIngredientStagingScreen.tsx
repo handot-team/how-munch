@@ -51,6 +51,18 @@ function SaveStateIcon({ state }: { state: SaveState }) {
   return null;
 }
 
+/**
+ * 확인 버튼 문구로 저장 결과를 미리 보여 준다(완료 화면을 따로 두지 않는다).
+ * 가격을 못 읽은 줄(0원)은 식비 합에 넣지 않고 '모름'으로 따로 센다.
+ */
+function buildConfirmLabel(selectedItems: StagedItem[]) {
+  const total = selectedItems.reduce((sum, item) => sum + item.price, 0);
+  const unknownCount = selectedItems.filter((item) => item.price === 0).length;
+  const parts = [`${selectedItems.length}개 추가`, `식비 +${total.toLocaleString()}원`];
+  if (unknownCount > 0) parts.push(`모름 ${unknownCount}개`);
+  return parts.join(', ');
+}
+
 export function PromptIngredientStagingScreen({
   onClose,
   onComplete,
@@ -70,6 +82,7 @@ export function PromptIngredientStagingScreen({
   ).length;
   const selectedItems = items.filter((i) => checkedIds.includes(i.id));
   const allChecked = items.length > 0 && items.every((i) => checkedIds.includes(i.id));
+  const confirmLabel = buildConfirmLabel(selectedItems);
 
   function resolveCategory(item: StagedItem) {
     const cat = categories.find((c) => c.id === item.category_id);
@@ -209,6 +222,11 @@ export function PromptIngredientStagingScreen({
                   categoryEmoji={resolveCategory(item).emoji}
                   size="sm"
                 />
+                {item.price === 0 ? (
+                  <span className="text-xs font-medium text-orange-500">
+                    가격을 못 읽었어요 · 눌러서 입력
+                  </span>
+                ) : null}
               </button>
             </div>
           );
@@ -222,9 +240,7 @@ export function PromptIngredientStagingScreen({
         onClick={saveAll}
         disabled={isSaving || selectedItems.length === 0}
       >
-        {isSaving
-          ? `저장 중... (${doneCount}/${selectedItems.length})`
-          : `${selectedItems.length}개 추가`}
+        {isSaving ? `저장 중... (${doneCount}/${selectedItems.length})` : confirmLabel}
       </CTAButton>
     </AppScreen>
   );

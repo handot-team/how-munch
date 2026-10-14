@@ -247,6 +247,48 @@ export interface Database {
         };
         Relationships: [];
       };
+      fridge_batch_end_records: {
+        Row: {
+          id: string;
+          household_id: string;
+          fridge_item_id: string;
+          batch_id: string;
+          kind: 'eaten' | 'discarded';
+          amount: number;
+          price_amount: number | null;
+          ended_on: string;
+          created_by: string | null;
+          created_at: string;
+          undone_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          fridge_item_id: string;
+          batch_id: string;
+          kind: 'eaten' | 'discarded';
+          amount: number;
+          price_amount?: number | null;
+          ended_on?: string;
+          created_by?: string | null;
+          created_at?: string;
+          undone_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          household_id?: string;
+          fridge_item_id?: string;
+          batch_id?: string;
+          kind?: 'eaten' | 'discarded';
+          amount?: number;
+          price_amount?: number | null;
+          ended_on?: string;
+          created_by?: string | null;
+          created_at?: string;
+          undone_at?: string | null;
+        };
+        Relationships: [];
+      };
       dining_expenses: {
         Row: {
           id: string;
@@ -822,6 +864,18 @@ export interface Database {
       get_food_expense_daily_series: {
         Args: { p_household_id: string; p_year_month: string };
         Returns: { year_month: string; expense_date: string; kind: string; total: number }[];
+      };
+      get_discarded_food_expense_summary: {
+        Args: { p_household_id: string; p_year_month: string };
+        Returns: { known_amount: number; unknown_count: number }[];
+      };
+      record_fridge_batch_end: {
+        Args: { p_batch_id: string; p_kind: 'eaten' | 'discarded'; p_amount: number };
+        Returns: string;
+      };
+      undo_fridge_batch_end_record: {
+        Args: { p_record_id: string };
+        Returns: undefined;
       };
       add_ingredient_with_fridge: {
         Args: {

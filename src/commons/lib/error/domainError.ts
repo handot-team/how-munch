@@ -17,6 +17,7 @@ const DOMAIN_ERROR_CODE = {
   FRIDGE_BATCH_NOT_FOUND: 'FRG_005',
   FRIDGE_INVALID_QUANTITY: 'FRG_006',
   FRIDGE_ITEM_DUPLICATE_IDENTITY: 'FRG_007',
+  FRIDGE_END_RECORD_NOT_FOUND: 'FRG_008',
 
   // GRC: 장보기(Grocery) 도메인
   GROCERY_IN_USE_IN_MEAL: 'GRC_001',
@@ -89,6 +90,7 @@ const DOMAIN_ERROR_MESSAGE: Record<DomainApiCode, string> = {
   FRG_005: '재고 배치를 찾을 수 없습니다.',
   FRG_006: '유효하지 않은 수량입니다.',
   FRG_007: '같은 이름·브랜드·단위·카테고리의 재료가 이미 있습니다.',
+  FRG_008: '끝 기록을 찾을 수 없습니다.',
 
   // GRC
   GRC_001: '식단에 등록되어 있는 재료는 삭제할 수 없습니다.',
@@ -143,6 +145,7 @@ const POSTGRES_ERRCODE_TO_KEY: Partial<Record<string, DomainErrorCodeKey>> = {
   F0005: 'FRIDGE_BATCH_NOT_FOUND',
   F0006: 'FRIDGE_INVALID_QUANTITY',
   F0007: 'FRIDGE_ITEM_DUPLICATE_IDENTITY',
+  F0008: 'FRIDGE_END_RECORD_NOT_FOUND',
   C0001: 'GROCERY_IN_USE_IN_MEAL',
   H0001: 'HOUSEHOLD_INVITE_INVALID_OR_EXPIRED',
   H0002: 'HOUSEHOLD_ALREADY_MEMBER',

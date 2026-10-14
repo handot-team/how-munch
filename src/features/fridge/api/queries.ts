@@ -2,7 +2,11 @@ import { skipToken, useQuery } from '@tanstack/react-query';
 
 import { apiClient } from '@/commons/lib';
 
-import { fridgeItemKeys, type FridgeItemWithBatches } from '@/entities/fridge-item';
+import {
+  fridgeItemKeys,
+  type FridgeBatchEndRecord,
+  type FridgeItemWithBatches,
+} from '@/entities/fridge-item';
 import { useSynonymExpandedTerms } from '@/entities/search-synonym';
 
 interface FridgePreferences {
@@ -94,6 +98,18 @@ export function useFridgeBrandNamesQuery(householdId: string | null) {
     queryKey: fridgeItemKeys.brands(householdId ?? ''),
     queryFn: householdId
       ? () => apiClient.get<string[]>('/api/fridge/brands', { householdId })
+      : skipToken,
+  });
+}
+
+/**
+ * @description 재료의 최근 끝 기록(되돌리지 않은 것) 조회. 끝 기록 시트의 되돌리기 목록에 쓴다.
+ */
+export function useFridgeEndRecordsQuery(fridgeItemId: string | null) {
+  return useQuery({
+    queryKey: fridgeItemKeys.endRecords(fridgeItemId ?? ''),
+    queryFn: fridgeItemId
+      ? () => apiClient.get<FridgeBatchEndRecord[]>('/api/fridge/end-records', { fridgeItemId })
       : skipToken,
   });
 }

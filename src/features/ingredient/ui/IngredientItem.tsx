@@ -29,6 +29,8 @@ export function IngredientItem({
 }: IngredientItemProps) {
   const amountLabel = formatIngredientAmount(count, unit, true);
   const metaItems = [amountLabel, store].filter(Boolean) as string[];
+  // 영수증에서 가격을 못 읽은 줄은 0원으로 저장된다. 0원과 구분되게 '금액 모름'으로 보인다.
+  const isPriceUnknown = price === 0;
 
   return (
     <>
@@ -46,11 +48,12 @@ export function IngredientItem({
         </div>
         <span
           className={cn(
-            'ml-auto shrink-0 font-semibold text-gray-900',
+            'ml-auto shrink-0 font-semibold',
+            isPriceUnknown ? 'text-orange-500' : 'text-gray-900',
             size === 'sm' ? 'text-sm' : 'text-base',
           )}
         >
-          {price.toLocaleString()}원
+          {isPriceUnknown ? '금액 모름' : `${price.toLocaleString()}원`}
         </span>
       </div>
 

@@ -44,6 +44,8 @@ export function FoodExpenseItem({
       ? formatIngredientAmount(expense.count, expense.unit, true)
       : null;
   const metaItems = [amountLabel, expense.store].filter(Boolean) as string[];
+  // 영수증에서 가격을 못 읽은 장보기 줄은 0원으로 저장된다. 합계에는 0원으로 들어가지만 행에서는 '금액 모름'으로 보인다.
+  const isPriceUnknown = expense.kind === 'grocery' && expense.price === 0;
 
   return (
     <>
@@ -67,11 +69,12 @@ export function FoodExpenseItem({
         </div>
         <span
           className={cn(
-            'ml-auto shrink-0 font-semibold text-gray-900',
+            'ml-auto shrink-0 font-semibold',
+            isPriceUnknown ? 'text-orange-500' : 'text-gray-900',
             size === 'sm' ? 'text-sm' : 'text-base',
           )}
         >
-          {expense.price.toLocaleString()}원
+          {isPriceUnknown ? '금액 모름' : `${expense.price.toLocaleString()}원`}
         </span>
       </div>
 
