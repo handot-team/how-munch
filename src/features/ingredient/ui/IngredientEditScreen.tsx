@@ -3,7 +3,7 @@
 import { AppScreen } from '@stackflow/plugin-basic-ui';
 import { overlay } from 'overlay-kit';
 
-import { CTAConfirmButton, DeleteConfirmBottomSheet, Toast } from '@/commons/ui';
+import { Button, CTAButton, DeleteConfirmBottomSheet, Toast } from '@/commons/ui';
 
 import { type Ingredient } from '@/entities/ingredient';
 
@@ -98,8 +98,28 @@ export function IngredientEditScreen({
     });
   }
 
+  const busy = Boolean(updateMutation.isPending || deleteMutation.isPending);
+
+  // 시안 v6: 칸 배치는 그대로 두고, 하단은 저장 한 칸 가득, 삭제는 앱바 오른쪽 위 빨간 글자로 옮겼다(삭제 확인 시트는 그대로).
   return (
-    <AppScreen className="pointer-events-auto" appBar={{ title: '장보기 수정' }}>
+    <AppScreen
+      className="pointer-events-auto"
+      appBar={{
+        title: '장보기 수정',
+        renderRight: () => (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={openDeleteConfirm}
+            className="text-[15px] font-semibold text-[#DC2626] hover:text-[#DC2626]"
+          >
+            삭제
+          </Button>
+        ),
+      }}
+    >
       <div className="px-4 pt-4 pb-28">
         <IngredientForm
           id={ingredient.id}
@@ -124,26 +144,9 @@ export function IngredientEditScreen({
           onOpenBrandSearch={onOpenBrandSearch}
         />
       </div>
-      <CTAConfirmButton>
-        <CTAConfirmButton.Left
-          type="button"
-          color="danger"
-          variant="subtle"
-          disabled={Boolean(updateMutation.isPending || deleteMutation.isPending)}
-          onClick={openDeleteConfirm}
-        >
-          삭제
-        </CTAConfirmButton.Left>
-        <CTAConfirmButton.Right
-          type="submit"
-          form={formId}
-          color="confirm"
-          variant="filled"
-          disabled={Boolean(updateMutation.isPending || deleteMutation.isPending)}
-        >
-          저장
-        </CTAConfirmButton.Right>
-      </CTAConfirmButton>
+      <CTAButton type="submit" form={formId} color="confirm" variant="filled" disabled={busy}>
+        저장
+      </CTAButton>
     </AppScreen>
   );
 }

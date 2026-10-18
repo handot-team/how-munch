@@ -15,6 +15,8 @@ interface FoodExpenseItemProps {
   size?: 'sm' | 'md';
   /** 검색어(유사어 확장 포함). 품목명과 가게명에서 일치하는 구간을 굵게 칠한다 */
   highlightTerms?: string[];
+  /** 시안 v6: 가격 없는 장보기 줄의 가격 자리 문구(장보기 담기 화면은 '가격 입력'). 주면 아래 이유 줄은 뺀다 */
+  missingPriceLabel?: string;
 }
 
 /**
@@ -28,6 +30,7 @@ export function FoodExpenseItem({
   categoryEmoji,
   size = 'md',
   highlightTerms,
+  missingPriceLabel,
 }: FoodExpenseItemProps) {
   // 외식비는 메뉴를 기억 못 해 비워둘 수 있다. 그때는 가게명이 제목 자리로 올라온다.
   const title = expense.name || expense.brand || '';
@@ -74,7 +77,9 @@ export function FoodExpenseItem({
             size === 'sm' ? 'text-sm' : 'text-base',
           )}
         >
-          {isPriceUnknown ? '금액 모름' : `${expense.price.toLocaleString()}원`}
+          {isPriceUnknown
+            ? (missingPriceLabel ?? '금액 모름')
+            : `${expense.price.toLocaleString()}원`}
         </span>
       </div>
 
@@ -96,7 +101,7 @@ export function FoodExpenseItem({
         ))}
       </div>
       {/* 시안 v5: '금액 모름'이 무슨 상황인지와 고치는 법을 행에서 바로 알린다. 누르면 수정 화면에서 가격을 넣는다. */}
-      {isPriceUnknown ? (
+      {isPriceUnknown && !missingPriceLabel ? (
         <span className="text-[13px] font-medium text-[#C2410C]">
           영수증에서 가격을 못 읽었어요 · 눌러서 입력
         </span>

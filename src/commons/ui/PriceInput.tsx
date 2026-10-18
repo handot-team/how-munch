@@ -29,6 +29,8 @@ interface PriceInputProps extends Omit<React.ComponentProps<typeof InputGroup.In
   min?: number;
   onChange?: (value: number) => void;
   onValueChange?: (value: number) => void;
+  /** 0원을 '0' 대신 빈칸으로 보인다(기본값 없이 빈칸에서 시작하는 칸) */
+  blankWhenZero?: boolean;
 }
 
 function PriceInput({
@@ -37,9 +39,11 @@ function PriceInput({
   min = 0,
   onChange,
   onValueChange,
+  blankWhenZero = false,
   className,
   ...props
 }: PriceInputProps) {
+  const display = (price: number) => (blankWhenZero && price === 0 ? '' : formatPrice(price));
   const [currentValue, setCurrentValue] = useControlledState<number>({
     value,
     defaultValue: normalizePrice(defaultValue, min),
@@ -49,12 +53,13 @@ function PriceInput({
     },
   });
 
-  const [inputText, setInputText] = React.useState(formatPrice(currentValue));
+  const [inputText, setInputText] = React.useState(display(currentValue));
 
   React.useEffect(
     function syncFormattedPriceFromValue() {
-      setInputText(formatPrice(currentValue));
+      setInputText(display(currentValue));
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [currentValue],
   );
 
@@ -71,11 +76,11 @@ function PriceInput({
     const normalizedValue = normalizePrice(parsedValue, min);
 
     setCurrentValue(normalizedValue);
-    setInputText(formatPrice(normalizedValue));
+    setInputText(display(normalizedValue));
   }
 
   function restoreFormattedPriceOnBlur() {
-    setInputText(formatPrice(currentValue));
+    setInputText(display(currentValue));
   }
 
   return (

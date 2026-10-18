@@ -384,7 +384,13 @@ export function IngredientForm({
           <Form.Field field={field}>
             <Form.Label required>가격</Form.Label>
             <Form.Control>
-              <PriceInput value={field.state.value} onChange={field.handleChange} />
+              {/* 시안 v6: 가격 0원(영수증에서 못 읽은 가격)은 빈칸으로 보인다 */}
+              <PriceInput
+                value={field.state.value}
+                onChange={field.handleChange}
+                blankWhenZero
+                placeholder="가격"
+              />
             </Form.Control>
             <Form.Error />
           </Form.Field>

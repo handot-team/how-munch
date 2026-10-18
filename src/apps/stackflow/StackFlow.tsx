@@ -1,7 +1,5 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-
 import { basicUIPlugin } from '@stackflow/plugin-basic-ui';
 import { historySyncPlugin } from '@stackflow/plugin-history-sync';
 import { basicRendererPlugin } from '@stackflow/plugin-renderer-basic';
@@ -15,7 +13,12 @@ import { type Meal, type MealType } from '@/entities/meal';
 
 import { BudgetEditScreen, BudgetScreen } from '@/features/budget';
 import { DiningExpenseAddScreen, DiningExpenseEditScreen } from '@/features/dining-expense';
-import { FoodExpenseSearchScreen, toDiningExpense, toIngredient } from '@/features/food-expense';
+import {
+  FoodExpenseItem,
+  FoodExpenseSearchScreen,
+  toDiningExpense,
+  toIngredient,
+} from '@/features/food-expense';
 import {
   FridgeBatchEditScreen,
   FridgeExpiryListScreen,
@@ -403,6 +406,29 @@ function PromptIngredientAddActivity({
   );
 }
 
+/** 담은 품목을 식비 탭 행(FoodExpenseItem)과 같은 모양으로 그리려고 식비 한 줄 모양으로 옮긴다. */
+function stagedToFoodExpense(item: StagedItem, householdId: string): FoodExpense {
+  return {
+    id: item.id,
+    household_id: householdId,
+    user_id: null,
+    kind: 'grocery',
+    date: item.date,
+    name: item.name,
+    brand: item.brand || null,
+    store: item.store || null,
+    price: item.price,
+    category_id: item.category_id,
+    count: item.count,
+    unit: item.unit,
+    linked_fridge_item_id: null,
+    linked_fridge_batch_id: null,
+    memo: null,
+    created_at: '',
+    updated_at: '',
+  };
+}
+
 function PromptIngredientStagingActivity({
   params,
 }: {
@@ -410,35 +436,11 @@ function PromptIngredientStagingActivity({
     householdId: string;
     userId: string;
     suggestions?: string[];
-    /** 'receipt'면 화면을 열자마자 영수증 화면을 띄운다(식비 탭의 📷 영수증) */
-    start?: 'receipt';
   };
 }) {
-  const { pop, push } = useActions();
-  const startedRef = useRef(false);
+  const { pop } = useActions();
 
-  function openReceipt() {
-    push('PromptIngredientAddActivity', {
-      householdId: params.householdId,
-      userId: params.userId,
-      suggestions: params.suggestions ?? [],
-    });
-  }
-
-  useEffect(
-    function openReceiptOnStart() {
-      if (params.start !== 'receipt' || startedRef.current) return;
-      startedRef.current = true;
-      openReceipt();
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-
-  function openDining() {
-    push('DiningExpenseAddActivity', { householdId: params.householdId });
-  }
-
+  // 시안 v6: 장보기 담기 화면. 직접 쓰기와 영수증(식비 탭 + 시트에서 고른 사진) 모두 이 화면으로 온다.
   return (
     <PromptIngredientStagingScreen
       onClose={pop}
@@ -446,8 +448,14 @@ function PromptIngredientStagingActivity({
       householdId={params.householdId}
       userId={params.userId}
       suggestions={params.suggestions ?? []}
-      onOpenReceipt={openReceipt}
-      onOpenDining={openDining}
+      renderRow={(item, info) => (
+        <FoodExpenseItem
+          expense={stagedToFoodExpense(item, params.householdId)}
+          categoryLabel={info.categoryLabel}
+          categoryEmoji={info.categoryEmoji}
+          missingPriceLabel={info.missingPriceLabel}
+        />
+      )}
     />
   );
 }

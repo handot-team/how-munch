@@ -80,7 +80,8 @@ export function DiningExpenseForm({
       brand: defaultValues?.brand ?? '',
       name: defaultValues?.name ?? '',
       store: defaultValues?.store ?? '',
-      price: defaultValues?.price ?? 100,
+      // 시안 v6: 금액 기본값 100 대신 빈칸에서 시작한다
+      price: defaultValues?.price ?? 0,
       memo: defaultValues?.memo ?? '',
     },
     validators: {
@@ -228,7 +229,12 @@ export function DiningExpenseForm({
           <Form.Field field={field}>
             <Form.Label required>금액</Form.Label>
             <Form.Control>
-              <PriceInput value={field.state.value} onChange={field.handleChange} />
+              <PriceInput
+                value={field.state.value}
+                onChange={field.handleChange}
+                blankWhenZero
+                placeholder="금액"
+              />
             </Form.Control>
             <Form.Error />
           </Form.Field>

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { addMonths, endOfMonth, format, startOfMonth, subMonths } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { Camera, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { overlay } from 'overlay-kit';
 
 import { stackFlowActions } from '@/apps/stackflow/StackFlow';
 
@@ -22,6 +23,9 @@ import {
   useFoodExpensesQuery,
   useFoodExpenseSuggestionsQuery,
 } from '@/features/food-expense';
+import { queueReceiptFiles } from '@/features/ingredient';
+
+import { StoreAddMethodSheet } from './StoreAddMethodSheet';
 
 interface StorePageProps {
   householdId: string;
@@ -55,14 +59,23 @@ export function StorePage({ householdId, userId }: StorePageProps) {
   const handlePrevMonth = () => setCurrentDate((d) => subMonths(d, 1));
   const handleNextMonth = () => setCurrentDate((d) => addMonths(d, 1));
 
-  // 두 입구(직접 쓰기, 영수증) 모두 같은 장보기 기록 화면으로 간다. 영수증은 열자마자 영수증 화면을 띄운다.
-  function openGroceryRecord(start?: 'receipt') {
+  // 시안 v6: 장보기는 직접 쓰기와 영수증 모두 장보기 담기 화면으로 간다.
+  function openGroceryBasket() {
     stackFlowActions.push('PromptIngredientStagingActivity', {
       householdId,
       userId,
       suggestions: grocerySuggestions,
-      ...(start ? { start } : {}),
     });
+  }
+
+  // 영수증은 + 시트의 행을 누른 그 순간 사진 고르기 창을 연다(브라우저는 사용자 누름 안에서만 연다).
+  // 고르면 "분석하기" 없이 담기 화면이 바로 읽는다. 앨범에서 여러 장을 한 번에 고를 수 있다.
+  const receiptInputRef = useRef<HTMLInputElement>(null);
+  function pickReceipts(files: FileList | null) {
+    const picked = Array.from(files ?? []);
+    if (picked.length === 0) return;
+    queueReceiptFiles(picked);
+    openGroceryBasket();
   }
 
   function openBudget() {
@@ -71,6 +84,10 @@ export function StorePage({ householdId, userId }: StorePageProps) {
 
   function openBudgetEdit() {
     stackFlowActions.push('BudgetEditActivity', { householdId, yearMonth });
+  }
+
+  function openDiningExpenseAdd() {
+    stackFlowActions.push('DiningExpenseAddActivity', { householdId });
   }
 
   function openExpenseEdit(expense: FoodExpense) {
@@ -88,6 +105,34 @@ export function StorePage({ householdId, userId }: StorePageProps) {
     if (diningExpense) {
       stackFlowActions.push('DiningExpenseEditActivity', { householdId, expense: diningExpense });
     }
+  }
+
+  function openAddMethodSheet() {
+    overlay.open(({ isOpen, close, unmount }) => {
+      function closeSheet() {
+        close();
+        window.setTimeout(unmount, 300);
+      }
+
+      return (
+        <StoreAddMethodSheet
+          open={isOpen}
+          onClose={closeSheet}
+          onGroceryDirectAdd={() => {
+            closeSheet();
+            openGroceryBasket();
+          }}
+          onGroceryReceiptAdd={() => {
+            receiptInputRef.current?.click();
+            closeSheet();
+          }}
+          onDiningAdd={() => {
+            closeSheet();
+            openDiningExpenseAdd();
+          }}
+        />
+      );
+    });
   }
 
   return (
@@ -131,29 +176,28 @@ export function StorePage({ householdId, userId }: StorePageProps) {
         <FoodExpenseList householdId={householdId} expenses={expenses} onSelect={openExpenseEdit} />
       )}
 
-      {/* 입구 두 칸: 직접 쓰기 | 영수증. 외식비는 장보기 기록 화면 위 탭에서 고른다.
-          식비 탭은 Z 패턴(왼쪽 위 제목 → 오른쪽 위 아이콘 → 대각선 목록 → 오른쪽 아래)으로 읽히고, 그 끝이 이 입구다.
-          오른손 엄지가 편한 아래쪽에 두고, 목록 끝 가격을 가리지 않게 목록 아래에 빈 자리를 둔다. */}
-      <div aria-hidden className="h-20" />
-      <div className="fixed right-4 [bottom:calc(constant(safe-area-inset-bottom)+84px)] [bottom:calc(env(safe-area-inset-bottom)+84px)] z-40 flex h-[52px] overflow-hidden rounded-full bg-emerald-700 text-[15px] font-semibold text-white shadow-[0_4px_12px_rgba(0,0,0,0.12)] sm:right-[calc(50%-215px+16px)]">
-        <button
-          type="button"
-          onClick={() => openGroceryRecord()}
-          className="flex items-center gap-1.5 pr-4 pl-5 active:bg-emerald-800"
-        >
-          <Plus className="size-[18px]" strokeWidth={2.5} />
-          직접 쓰기
-        </button>
-        <span className="my-4 w-px bg-white/30" aria-hidden />
-        <button
-          type="button"
-          onClick={() => openGroceryRecord('receipt')}
-          className="flex items-center gap-1.5 pr-5 pl-4 active:bg-emerald-800"
-        >
-          <Camera className="size-[18px]" strokeWidth={2.2} />
-          영수증
-        </button>
-      </div>
+      <input
+        ref={receiptInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        data-receipt-input
+        className="hidden"
+        onChange={(e) => {
+          pickReceipts(e.target.files);
+          e.target.value = '';
+        }}
+      />
+
+      {/* FAB 추가 버튼 */}
+      <Button
+        onClick={openAddMethodSheet}
+        color="primary"
+        className="fixed right-4 [bottom:calc(constant(safe-area-inset-bottom)+84px)] [bottom:calc(env(safe-area-inset-bottom)+84px)] z-40 size-12 rounded-full shadow-lg sm:right-[calc(50%-215px+16px)]"
+        size="icon-lg"
+      >
+        <Plus className="size-5" />
+      </Button>
     </div>
   );
 }

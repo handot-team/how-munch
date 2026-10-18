@@ -22,6 +22,7 @@ export {
   clearPendingPromptEditCallback,
 } from './model/promptIngredientEditStore';
 export { usePromptIngredientStore } from './model/promptIngredientStore';
+export { queueReceiptFiles } from './model/receiptInbox';
 export { parseAiResponse, type StagedItem } from './lib/parseAiResponse';
 export { PromptIngredientAddScreen } from './ui/PromptIngredientAddScreen';
 export { PromptIngredientStagingScreen } from './ui/PromptIngredientStagingScreen';

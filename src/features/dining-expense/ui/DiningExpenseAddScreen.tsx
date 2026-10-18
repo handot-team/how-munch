@@ -55,6 +55,7 @@ export function DiningExpenseAddScreen({ onClose, householdId }: DiningExpenseAd
     );
   }
 
+  // 시안 v6: 스크롤해도 저장 버튼이 숨지 않는다(hideOnScroll 끔). 금액은 빈칸에서 시작한다(DiningExpenseForm).
   return (
     <AppScreen className="pointer-events-auto" appBar={{ title: '외식비 입력' }}>
       <div className="px-4 pt-4 pb-28">
@@ -71,7 +72,6 @@ export function DiningExpenseAddScreen({ onClose, householdId }: DiningExpenseAd
         form={formId}
         color="confirm"
         variant="filled"
-        hideOnScroll
         disabled={addMutation.isPending}
       >
         저장
