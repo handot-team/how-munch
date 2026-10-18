@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { format } from 'date-fns';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Camera, ChevronLeft, ImagePlus, Loader2, ReceiptText, Sparkles } from 'lucide-react';
+import { Camera, ChevronLeft, ImagePlus, Loader2 } from 'lucide-react';
 import { AppScreen } from '@stackflow/plugin-basic-ui';
 
 import { cn } from '@/commons/lib';
@@ -201,7 +201,6 @@ export function PromptIngredientAddScreen({
         onClick={analyze}
         disabled={!payload}
       >
-        <Sparkles className="size-4" />
         {status === 'error' ? '다시 분석하기' : '분석하기'}
       </CTAButton>
     </AppScreen>
@@ -218,45 +217,47 @@ interface IdleViewProps {
 }
 
 function IdleView({ onOpenGallery, onOpenCamera }: IdleViewProps) {
+  // 시안 v4: 점선·그라데이션 업로드 상자를 없앴다. 안내 글은 왼쪽 위(Z 패턴 시작)에 두고,
+  // 누를 버튼은 엄지가 편한 아래에 TDS 두 버튼 하단 CTA처럼 [앨범에서 선택(보조, 왼쪽) | 사진 찍기(주, 오른쪽)]로 둔다.
   return (
     <>
-      <header className="flex flex-col gap-1.5">
-        <h1 className="text-xl font-bold tracking-tight text-gray-900">영수증을 올려주세요</h1>
-        <p className="text-sm leading-relaxed text-gray-500">
-          사진 한 장이면 AI가 품목·가격·수량을
-          <br />
-          자동으로 정리해드려요.
+      <header className="flex flex-col gap-2">
+        <h1 className="text-[22px] leading-snug font-bold text-[#191F28]">영수증을 올려 주세요</h1>
+        <p className="text-[15px] leading-relaxed text-[#4E5968]">
+          품목, 가격, 수량을 읽어 장보기 기록에 담아 드려요.
         </p>
       </header>
 
-      <button
-        type="button"
-        onClick={onOpenGallery}
-        className={cn(
-          'group relative flex flex-col items-center justify-center gap-4 overflow-hidden rounded-3xl border-2 border-dashed border-emerald-200 bg-emerald-50/50 px-6 py-14',
-          'transition-colors active:bg-emerald-50',
-        )}
-      >
-        <span className="pointer-events-none absolute -top-10 -right-8 size-32 rounded-full bg-emerald-100/60 blur-2xl" />
-        <span className="pointer-events-none absolute -bottom-12 -left-10 size-36 rounded-full bg-emerald-100/40 blur-2xl" />
-        <span className="relative flex size-16 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-emerald-100">
-          <ReceiptText className="size-8 text-emerald-600" strokeWidth={1.6} />
-        </span>
-        <span className="relative flex flex-col items-center gap-0.5">
-          <span className="text-sm font-semibold text-gray-800">탭해서 사진 선택</span>
-          <span className="text-xs text-gray-400">영수증 · 장보기 목록 이미지</span>
-        </span>
-      </button>
+      <ul className="flex flex-col gap-3 pt-2 text-[15px] text-[#4E5968]">
+        <li className="flex gap-3">
+          <span className="font-semibold text-[#191F28]">1</span>영수증 전체가 화면에 들어오게 찍어
+          주세요
+        </li>
+        <li className="flex gap-3">
+          <span className="font-semibold text-[#191F28]">2</span>읽은 품목은 저장 전에 하나씩 고칠
+          수 있어요
+        </li>
+      </ul>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Button type="button" variant="outline" color="primary" onClick={onOpenCamera}>
-          <Camera className="size-4" />
-          사진 촬영
-        </Button>
-        <Button type="button" variant="outline" color="primary" onClick={onOpenGallery}>
-          <ImagePlus className="size-4" />
-          앨범에서 선택
-        </Button>
+      <div className="safe-area-padding-bottom fixed right-0 bottom-0 left-0 z-[var(--z-cta)] bg-white px-4 pt-2 pb-3">
+        <div className="mx-auto grid w-full max-w-[480px] grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onOpenGallery}
+            className="flex h-14 items-center justify-center gap-1.5 rounded-2xl bg-[#F2F4F6] text-[17px] font-semibold text-[#4E5968] active:bg-[#E5E8EB]"
+          >
+            <ImagePlus className="size-5" />
+            앨범에서 선택
+          </button>
+          <button
+            type="button"
+            onClick={onOpenCamera}
+            className="flex h-14 items-center justify-center gap-1.5 rounded-2xl bg-emerald-700 text-[17px] font-semibold text-white active:bg-emerald-800"
+          >
+            <Camera className="size-5" />
+            사진 찍기
+          </button>
+        </div>
       </div>
     </>
   );

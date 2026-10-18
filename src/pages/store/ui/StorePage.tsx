@@ -131,23 +131,26 @@ export function StorePage({ householdId, userId }: StorePageProps) {
         <FoodExpenseList householdId={householdId} expenses={expenses} onSelect={openExpenseEdit} />
       )}
 
-      {/* 입구 두 칸: 직접 쓰기 | 영수증. 외식비는 장보기 기록 화면 위 세그먼트에서 고른다. */}
-      <div className="fixed right-4 [bottom:calc(constant(safe-area-inset-bottom)+84px)] [bottom:calc(env(safe-area-inset-bottom)+84px)] z-40 flex h-12 overflow-hidden rounded-full bg-emerald-600 text-sm font-semibold text-white shadow-lg sm:right-[calc(50%-215px+16px)]">
+      {/* 입구 두 칸: 직접 쓰기 | 영수증. 외식비는 장보기 기록 화면 위 탭에서 고른다.
+          식비 탭은 Z 패턴(왼쪽 위 제목 → 오른쪽 위 아이콘 → 대각선 목록 → 오른쪽 아래)으로 읽히고, 그 끝이 이 입구다.
+          오른손 엄지가 편한 아래쪽에 두고, 목록 끝 가격을 가리지 않게 목록 아래에 빈 자리를 둔다. */}
+      <div aria-hidden className="h-20" />
+      <div className="fixed right-4 [bottom:calc(constant(safe-area-inset-bottom)+84px)] [bottom:calc(env(safe-area-inset-bottom)+84px)] z-40 flex h-[52px] overflow-hidden rounded-full bg-emerald-700 text-[15px] font-semibold text-white shadow-[0_4px_12px_rgba(0,0,0,0.12)] sm:right-[calc(50%-215px+16px)]">
         <button
           type="button"
           onClick={() => openGroceryRecord()}
-          className="flex items-center gap-1 pr-3 pl-4 active:bg-emerald-700"
+          className="flex items-center gap-1.5 pr-4 pl-5 active:bg-emerald-800"
         >
-          <Plus className="size-4" />
+          <Plus className="size-[18px]" strokeWidth={2.5} />
           직접 쓰기
         </button>
-        <span className="my-3 w-px bg-white/40" aria-hidden />
+        <span className="my-4 w-px bg-white/30" aria-hidden />
         <button
           type="button"
           onClick={() => openGroceryRecord('receipt')}
-          className="flex items-center gap-1 pr-4 pl-3 active:bg-emerald-700"
+          className="flex items-center gap-1.5 pr-5 pl-4 active:bg-emerald-800"
         >
-          <Camera className="size-4" />
+          <Camera className="size-[18px]" strokeWidth={2.2} />
           영수증
         </button>
       </div>
