@@ -58,16 +58,9 @@ export function StorePage({ householdId, userId }: StorePageProps) {
   const handlePrevMonth = () => setCurrentDate((d) => subMonths(d, 1));
   const handleNextMonth = () => setCurrentDate((d) => addMonths(d, 1));
 
-  function openIngredientAdd() {
-    stackFlowActions.push('IngredientAddActivity', {
-      householdId,
-      userId,
-      suggestions: grocerySuggestions,
-    });
-  }
-
-  function openPromptIngredientAdd() {
-    stackFlowActions.push('PromptIngredientAddActivity', {
+  // 장보기 추가 화면이 곧 담은 목록이다. 직접 입력과 영수증이 한 화면에서 만난다.
+  function openGroceryAdd() {
+    stackFlowActions.push('PromptIngredientStagingActivity', {
       householdId,
       userId,
       suggestions: grocerySuggestions,
@@ -114,13 +107,9 @@ export function StorePage({ householdId, userId }: StorePageProps) {
         <StoreAddMethodSheet
           open={isOpen}
           onClose={closeSheet}
-          onGroceryDirectAdd={() => {
+          onGroceryAdd={() => {
             closeSheet();
-            openIngredientAdd();
-          }}
-          onGroceryReceiptAdd={() => {
-            closeSheet();
-            openPromptIngredientAdd();
+            openGroceryAdd();
           }}
           onDiningAdd={() => {
             closeSheet();

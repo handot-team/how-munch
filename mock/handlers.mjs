@@ -5,7 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { ANON_KEY, handleAuth, verifyJwt } from './auth.mjs';
 import { handlePostgrest } from './postgrest.mjs';
 
-// 영수증 인식(Anthropic Messages API) 고정 응답. 3차 시안의 이마트 영수증 5줄이고,
+// 영수증 인식(Anthropic Messages API) 고정 응답. 3차 시안의 이마트 영수증 5줄(나흘 전 날짜)이고,
 // 당근은 가격을 못 읽은 줄(0원)이다.
 const RECEIPT_ITEMS = [
   {
@@ -53,7 +53,13 @@ const RECEIPT_ITEMS = [
     price: 3200,
     category_code: 'processed',
   },
-].map((item) => ({ ...item, store: '이마트', date: '' }));
+].map((item) => ({ ...item, store: '이마트', date: receiptDate() }));
+
+// 영수증은 며칠 전 장보기다(직접 넣는 줄의 기본값 날짜·구매처와 다르게 읽힌 줄을 보여 준다).
+function receiptDate() {
+  const d = new Date(Date.now() + 9 * 3600_000 - 4 * 86400_000);
+  return d.toISOString().slice(0, 10);
+}
 
 function toResponse({ status, body, headers = {} }) {
   if (body === null || body === undefined || status === 204) {

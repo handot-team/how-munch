@@ -102,14 +102,6 @@ function IngredientAddActivity({
       defaultName={params.defaultName}
       onOpenProductNameSearch={openProductNameSearch}
       onOpenBrandSearch={openBrandSearch}
-      onOpenBasket={(autoSave) =>
-        push('PromptIngredientStagingActivity', {
-          householdId: params.householdId,
-          userId: params.userId,
-          suggestions: params.suggestions ?? [],
-          autoSave,
-        })
-      }
     />
   );
 }
@@ -393,14 +385,11 @@ function PromptIngredientAddActivity({
     suggestions?: string[];
   };
 }) {
-  const { pop, push } = useActions();
+  const { pop } = useActions();
 
+  // 영수증은 장보기 추가 화면 안에서만 연다. 읽은 줄은 같은 목록에 붙었으니 그 화면으로 돌아간다.
   function handleParsed() {
-    push('PromptIngredientStagingActivity', {
-      householdId: params.householdId,
-      userId: params.userId,
-      suggestions: params.suggestions ?? [],
-    });
+    pop();
   }
 
   return (
@@ -419,16 +408,14 @@ function PromptIngredientStagingActivity({
     householdId: string;
     userId: string;
     suggestions?: string[];
-    autoSave?: boolean;
   };
 }) {
   const { pop, push } = useActions();
 
-  function openEdit(item: StagedItem) {
-    push('PromptIngredientStagingEditActivity', {
+  function openReceipt() {
+    push('PromptIngredientAddActivity', {
       householdId: params.householdId,
       userId: params.userId,
-      item,
       suggestions: params.suggestions ?? [],
     });
   }
@@ -436,11 +423,11 @@ function PromptIngredientStagingActivity({
   return (
     <PromptIngredientStagingScreen
       onClose={pop}
-      onComplete={() => pop(2)}
+      onComplete={pop}
       householdId={params.householdId}
       userId={params.userId}
-      onEditItem={openEdit}
-      autoSave={params.autoSave}
+      suggestions={params.suggestions ?? []}
+      onOpenReceipt={openReceipt}
     />
   );
 }
