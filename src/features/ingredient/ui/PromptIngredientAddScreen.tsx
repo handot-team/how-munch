@@ -8,7 +8,7 @@ import { Camera, ChevronLeft, ImagePlus, Loader2 } from 'lucide-react';
 import { AppScreen } from '@stackflow/plugin-basic-ui';
 
 import { cn } from '@/commons/lib';
-import { Button, CTAButton, Toast } from '@/commons/ui';
+import { Button, CTAButton, CTAConfirmButton, Toast } from '@/commons/ui';
 
 import { useIngredientCategoriesQuery } from '@/entities/ingredient-category';
 
@@ -52,18 +52,18 @@ export function PromptIngredientAddScreen({
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const [status, setStatus] = useState<Status>('idle');
-  const [preview, setPreview] = useState<string | null>(null);
-  const [payload, setPayload] = useState<ImagePayload | null>(null);
+  // 시안 v5: 앨범에서 영수증 여러 장을 한 번에 고른다. 사진 찍기는 한 장씩이다.
+  const [previews, setPreviews] = useState<string[]>([]);
+  const [payloads, setPayloads] = useState<ImagePayload[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
   const [stepIndex, setStepIndex] = useState(0);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
     function revokePreviewOnChange() {
-      if (!preview) return;
-      return () => URL.revokeObjectURL(preview);
+      return () => previews.forEach((url) => URL.revokeObjectURL(url));
     },
-    [preview],
+    [previews],
   );
 
   useEffect(function clearResetTimerOnUnmount() {
@@ -83,12 +83,13 @@ export function PromptIngredientAddScreen({
     [status, reduceMotion],
   );
 
-  async function selectImage(file: File | undefined) {
-    if (!file) return;
+  async function selectImages(fileList: FileList | null) {
+    const files = Array.from(fileList ?? []);
+    if (files.length === 0) return;
     try {
-      const { base64, mimeType } = await compressReceiptImage(file);
-      setPreview(URL.createObjectURL(file));
-      setPayload({ base64, mimeType });
+      const next = await Promise.all(files.map((file) => compressReceiptImage(file)));
+      setPreviews(files.map((file) => URL.createObjectURL(file)));
+      setPayloads(next.map(({ base64, mimeType }) => ({ base64, mimeType })));
       setErrorMessage('');
       setStatus('ready');
     } catch {
@@ -97,23 +98,27 @@ export function PromptIngredientAddScreen({
   }
 
   async function analyze() {
-    if (!payload) return;
+    if (payloads.length === 0) return;
     setStepIndex(0);
     setStatus('analyzing');
     try {
-      const { items } = await parseReceipt.mutateAsync({
-        imageBase64: payload.base64,
-        mimeType: payload.mimeType,
-        categories,
-        today: format(new Date(), 'yyyy-MM-dd'),
-      });
-      // 영수증 줄은 담기 목록에 더한다(직접 입력으로 담은 줄과 같은 목록).
-      addItems(items.map((item) => ({ ...item, source: 'receipt' as const })));
-      onParsed(items);
+      // 영수증마다 따로 읽어 같은 목록에 붙인다. 가게·날짜가 달라 목록에서는 영수증마다 묶음 머리가 하나씩 생긴다.
+      const all: StagedItem[] = [];
+      for (const payload of payloads) {
+        const { items } = await parseReceipt.mutateAsync({
+          imageBase64: payload.base64,
+          mimeType: payload.mimeType,
+          categories,
+          today: format(new Date(), 'yyyy-MM-dd'),
+        });
+        all.push(...items);
+      }
+      addItems(all.map((item) => ({ ...item, source: 'receipt' as const })));
+      onParsed(all);
       resetTimerRef.current = setTimeout(() => {
         setStatus('idle');
-        setPreview(null);
-        setPayload(null);
+        setPreviews([]);
+        setPayloads([]);
         setErrorMessage('');
       }, 2000);
     } catch (err) {
@@ -133,6 +138,8 @@ export function PromptIngredientAddScreen({
   }
 
   const showCTA = status === 'ready' || status === 'error';
+  let analyzeLabel = payloads.length > 1 ? `${payloads.length}장 분석하기` : '분석하기';
+  if (status === 'error') analyzeLabel = '다시 분석하기';
 
   return (
     <AppScreen
@@ -160,9 +167,10 @@ export function PromptIngredientAddScreen({
         ref={galleryInputRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
         onChange={(e) => {
-          void selectImage(e.target.files?.[0]);
+          void selectImages(e.target.files);
           e.target.value = '';
         }}
       />
@@ -173,7 +181,7 @@ export function PromptIngredientAddScreen({
         capture="environment"
         className="hidden"
         onChange={(e) => {
-          void selectImage(e.target.files?.[0]);
+          void selectImages(e.target.files);
           e.target.value = '';
         }}
       />
@@ -184,7 +192,7 @@ export function PromptIngredientAddScreen({
         ) : (
           <ScanView
             status={status}
-            preview={preview}
+            previews={previews}
             stepIndex={stepIndex}
             errorMessage={errorMessage}
             reduceMotion={Boolean(reduceMotion)}
@@ -199,9 +207,10 @@ export function PromptIngredientAddScreen({
         color="confirm"
         variant="filled"
         onClick={analyze}
-        disabled={!payload}
+        containerClassName="pb-[max(env(safe-area-inset-bottom),20px)] bg-white"
+        disabled={payloads.length === 0}
       >
-        {status === 'error' ? '다시 분석하기' : '분석하기'}
+        {analyzeLabel}
       </CTAButton>
     </AppScreen>
   );
@@ -224,41 +233,26 @@ function IdleView({ onOpenGallery, onOpenCamera }: IdleViewProps) {
       <header className="flex flex-col gap-2">
         <h1 className="text-[22px] leading-snug font-bold text-[#191F28]">영수증을 올려 주세요</h1>
         <p className="text-[15px] leading-relaxed text-[#4E5968]">
-          품목, 가격, 수량을 읽어 장보기 기록에 담아 드려요.
+          여러 장이면 앨범에서 한 번에 골라 주세요.
         </p>
       </header>
 
-      <ul className="flex flex-col gap-3 pt-2 text-[15px] text-[#4E5968]">
-        <li className="flex gap-3">
-          <span className="font-semibold text-[#191F28]">1</span>영수증 전체가 화면에 들어오게 찍어
-          주세요
-        </li>
-        <li className="flex gap-3">
-          <span className="font-semibold text-[#191F28]">2</span>읽은 품목은 저장 전에 하나씩 고칠
-          수 있어요
-        </li>
-      </ul>
-
-      <div className="safe-area-padding-bottom fixed right-0 bottom-0 left-0 z-[var(--z-cta)] bg-white px-4 pt-2 pb-3">
-        <div className="mx-auto grid w-full max-w-[480px] grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={onOpenGallery}
-            className="flex h-14 items-center justify-center gap-1.5 rounded-2xl bg-[#F2F4F6] text-[17px] font-semibold text-[#4E5968] active:bg-[#E5E8EB]"
-          >
-            <ImagePlus className="size-5" />
-            앨범에서 선택
-          </button>
-          <button
-            type="button"
-            onClick={onOpenCamera}
-            className="flex h-14 items-center justify-center gap-1.5 rounded-2xl bg-emerald-700 text-[17px] font-semibold text-white active:bg-emerald-800"
-          >
-            <Camera className="size-5" />
-            사진 찍기
-          </button>
-        </div>
-      </div>
+      {/* 시안 v5: 두 버튼은 앱 공용 두 버튼 하단 CTA(TDS FixedBottomCTA.Double에 대응). 왼쪽 약한 버튼, 오른쪽 주 버튼. */}
+      <CTAConfirmButton containerClassName="pb-[max(env(safe-area-inset-bottom),20px)] bg-white">
+        <CTAConfirmButton.Left
+          type="button"
+          variant="subtle"
+          color="cancel"
+          onClick={onOpenGallery}
+        >
+          <ImagePlus className="size-5" />
+          앨범에서 선택
+        </CTAConfirmButton.Left>
+        <CTAConfirmButton.Right type="button" onClick={onOpenCamera}>
+          <Camera className="size-5" />
+          사진 찍기
+        </CTAConfirmButton.Right>
+      </CTAConfirmButton>
     </>
   );
 }
@@ -269,7 +263,7 @@ function IdleView({ onOpenGallery, onOpenCamera }: IdleViewProps) {
 
 interface ScanViewProps {
   status: Exclude<Status, 'idle'>;
-  preview: string | null;
+  previews: string[];
   stepIndex: number;
   errorMessage: string;
   reduceMotion: boolean;
@@ -279,19 +273,28 @@ interface ScanViewProps {
 /**
  * @description 스캔 화면 상태(ready/analyzing/error)에 맞는 제목·설명 문구를 반환한다.
  */
-function resolveScanCopy(status: Exclude<Status, 'idle'>): { title: string; desc: string } {
+function resolveScanCopy(
+  status: Exclude<Status, 'idle'>,
+  count: number,
+): { title: string; desc: string } {
   if (status === 'analyzing') {
     return { title: '영수증을 읽고 있어요', desc: '잠시만 기다려 주세요.' };
   }
   if (status === 'error') {
     return { title: '분석에 실패했어요', desc: '사진이 선명한지 확인하고 다시 시도해 주세요.' };
   }
+  if (count > 1) {
+    return {
+      title: `영수증 ${count}장이 맞나요?`,
+      desc: '영수증마다 따로 읽어 같은 목록에 담아요.',
+    };
+  }
   return { title: '이 영수증이 맞나요?', desc: '맞으면 아래에서 분석을 시작해요.' };
 }
 
 function ScanView({
   status,
-  preview,
+  previews,
   stepIndex,
   errorMessage,
   reduceMotion,
@@ -299,7 +302,8 @@ function ScanView({
 }: ScanViewProps) {
   const isAnalyzing = status === 'analyzing';
   const isError = status === 'error';
-  const copy = resolveScanCopy(status);
+  const copy = resolveScanCopy(status, previews.length);
+  const preview = previews[0] ?? null;
 
   return (
     <>
@@ -345,6 +349,23 @@ function ScanView({
           </div>
         ) : null}
       </div>
+
+      {previews.length > 1 ? (
+        <div className="flex gap-2">
+          {previews.map((url, index) => (
+            // eslint-disable-next-line @next/next/no-img-element -- 로컬 blob objectURL 미리보기
+            <img
+              key={url}
+              src={url}
+              alt={`영수증 ${index + 1}`}
+              className={cn(
+                'size-16 rounded-xl object-cover object-top',
+                index === 0 && 'ring-2 ring-[#191F28]',
+              )}
+            />
+          ))}
+        </div>
+      ) : null}
 
       {isAnalyzing ? (
         <div className="flex items-center justify-center gap-2 text-sm font-medium text-emerald-700">

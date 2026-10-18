@@ -95,6 +95,12 @@ export function FoodExpenseItem({
           </span>
         ))}
       </div>
+      {/* 시안 v5: '금액 모름'이 무슨 상황인지와 고치는 법을 행에서 바로 알린다. 누르면 수정 화면에서 가격을 넣는다. */}
+      {isPriceUnknown ? (
+        <span className="text-[13px] font-medium text-[#C2410C]">
+          영수증에서 가격을 못 읽었어요 · 눌러서 입력
+        </span>
+      ) : null}
     </>
   );
 }

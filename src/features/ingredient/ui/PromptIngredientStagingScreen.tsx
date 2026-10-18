@@ -3,17 +3,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { format } from 'date-fns';
-import { Camera, Check, ChevronLeft, ChevronRight, Loader2, Plus, X } from 'lucide-react';
+import { Camera, Check, ChevronDown, ChevronLeft, Loader2, Plus, X } from 'lucide-react';
 import { AppScreen } from '@stackflow/plugin-basic-ui';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { cn } from '@/commons/lib';
 import {
+  BottomSheet,
   Button,
+  Calendar,
   Chip,
   ChipRow,
   CTAPrimitive,
-  DatePicker,
   Input,
   Select,
   Toast,
@@ -305,6 +306,149 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   return <span className={cn('w-[5.5rem] shrink-0 text-[15px]', tone.label)}>{children}</span>;
 }
 
+/** 값 하나를 고르는 약한 버튼. 누르면 바텀시트가 열린다. */
+function SheetChip({
+  label,
+  placeholder,
+  onClick,
+  ariaLabel,
+  onPanel = false,
+}: {
+  label: string;
+  placeholder: string;
+  onClick: () => void;
+  ariaLabel: string;
+  onPanel?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      aria-haspopup="dialog"
+      onClick={onClick}
+      className={cn(
+        'flex h-10 min-w-0 items-center gap-1 rounded-full px-3.5 text-[15px] font-medium',
+        onPanel ? 'bg-white' : tone.fill,
+        label ? tone.text : tone.hint,
+      )}
+    >
+      <span className="truncate">{label || placeholder}</span>
+      <ChevronDown className={cn('size-4 shrink-0', tone.hint)} />
+    </button>
+  );
+}
+
+/**
+ * 날짜와 구매처를 한 줄에 두 버튼으로 둔다(시안 v5). 값이 다르고 고르는 방법도 달라 버튼과 시트를 나눈다.
+ * - 날짜: 날짜 바텀시트(달력). 고르면 바로 닫힌다.
+ * - 구매처: 구매처 바텀시트(TDS BottomSheet 단건 선택). 기록에 있는 구매처를 고르거나 새 이름을 쓴다.
+ */
+function PlaceChips({
+  date,
+  store,
+  storeOptions,
+  onChange,
+  onPanel = false,
+}: {
+  date: string;
+  store: string;
+  storeOptions: string[];
+  onChange: (updates: { date?: string; store?: string }) => void;
+  onPanel?: boolean;
+}) {
+  const [open, setOpen] = useState<'date' | 'store' | null>(null);
+  const [draft, setDraft] = useState(store);
+  const close = () => setOpen(null);
+  const pickStore = (value: string) => {
+    onChange({ store: value.trim() });
+    close();
+  };
+  const query = draft.trim();
+  const shownStores = [...new Set(storeOptions)].filter((s) => !query || s.includes(query));
+
+  return (
+    <div className="flex min-w-0 gap-2">
+      <SheetChip
+        ariaLabel="날짜 바꾸기"
+        label={longDate(date)}
+        placeholder="날짜"
+        onPanel={onPanel}
+        onClick={() => setOpen('date')}
+      />
+      <SheetChip
+        ariaLabel="구매처 바꾸기"
+        label={store}
+        placeholder="구매처"
+        onPanel={onPanel}
+        onClick={() => {
+          setDraft(store);
+          setOpen('store');
+        }}
+      />
+
+      <BottomSheet open={open === 'date'} onClose={close}>
+        <BottomSheet.Header heading="날짜" />
+        <BottomSheet.Content className="relative pb-6">
+          <Calendar
+            mode="single"
+            selected={new Date(date)}
+            defaultMonth={new Date(date)}
+            disabled={{ after: new Date() }}
+            onSelect={(d) => {
+              if (d) onChange({ date: format(d, 'yyyy-MM-dd') });
+              close();
+            }}
+            className="mx-auto w-full max-w-[340px] border-none p-0"
+          />
+        </BottomSheet.Content>
+      </BottomSheet>
+
+      <BottomSheet open={open === 'store'} onClose={close}>
+        <BottomSheet.Header heading="구매처" />
+        <BottomSheet.Content className="flex flex-col gap-1 pb-2">
+          <Input
+            value={draft}
+            placeholder="구매처 이름"
+            aria-label="구매처 이름"
+            className={fieldClass}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                pickStore(draft);
+              }
+            }}
+            enterKeyHint="done"
+            autoComplete="off"
+          />
+          <ul className="flex flex-col pt-2">
+            {shownStores.map((name) => (
+              <li key={name}>
+                <button
+                  type="button"
+                  onClick={() => pickStore(name)}
+                  className={cn(
+                    'flex h-14 w-full items-center justify-between rounded-xl px-2 text-left text-[17px] active:bg-[#F2F4F6]',
+                    tone.text,
+                  )}
+                >
+                  {name}
+                  {name === store ? <Check className="size-5 text-emerald-700" /> : null}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </BottomSheet.Content>
+        <BottomSheet.Footer className="pb-5">
+          <CTAPrimitive type="button" onClick={() => pickStore(draft)}>
+            확인
+          </CTAPrimitive>
+        </BottomSheet.Footer>
+      </BottomSheet>
+    </div>
+  );
+}
+
 /**
  * 펼친 품목. 품목 줄을 누르면 그 자리에서 펼쳐지고, 고칠 칸이 모두 보인다.
  * 위에서부터 품목명 | 가격, 수량, 분류, 브랜드, 구매처·날짜, 삭제.
@@ -336,7 +480,6 @@ function ExpandedItem({
   /** 가격 칸 Enter: 접고 입력줄로 돌아간다 */
   onDone: () => void;
 }) {
-  const [placeOpen, setPlaceOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const priceRef = useRef<HTMLInputElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
@@ -491,44 +634,15 @@ function ExpandedItem({
         />
       </div>
 
-      <div className="flex flex-col gap-2">
-        <button
-          type="button"
-          onClick={() => setPlaceOpen((v) => !v)}
-          className="flex h-11 items-center justify-between text-left"
-        >
-          <FieldLabel>날짜·구매처</FieldLabel>
-          <span className={cn('flex min-w-0 items-center gap-1 text-[15px]', tone.text)}>
-            <span className="truncate">
-              {longDate(item.date)} · {item.store || <span className={tone.hint}>구매처 없음</span>}
-            </span>
-            <ChevronRight
-              className={cn(
-                'size-4 shrink-0 transition-transform',
-                tone.hint,
-                placeOpen && 'rotate-90',
-              )}
-            />
-          </span>
-        </button>
-        {placeOpen ? (
-          <div className="flex gap-2">
-            <SuggestInput
-              className="flex-1"
-              value={item.store}
-              onChange={(store) => onChange({ store })}
-              options={storeOptions}
-              placeholder="구매처"
-              onPanel
-            />
-            <DatePicker
-              className="flex-1"
-              value={new Date(item.date)}
-              maxDate={new Date()}
-              onChange={(d) => d && onChange({ date: format(d, 'yyyy-MM-dd') })}
-            />
-          </div>
-        ) : null}
+      <div className="flex items-center gap-2">
+        <FieldLabel>날짜·구매처</FieldLabel>
+        <PlaceChips
+          date={item.date}
+          store={item.store}
+          storeOptions={storeOptions}
+          onChange={onChange}
+          onPanel
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-2 pt-1">
@@ -600,7 +714,6 @@ export function PromptIngredientStagingScreen({
     date: format(new Date(), 'yyyy-MM-dd'),
     store: '',
   });
-  const [defaultsOpen, setDefaultsOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [removed, setRemoved] = useState<Removed | null>(null);
@@ -635,7 +748,6 @@ export function PromptIngredientStagingScreen({
   const isSaving = items.some((i) => stateOf(i) === 'saving');
   const listItems = items.filter((i) => stateOf(i) !== 'unknown');
   const unknownItems = items.filter((i) => stateOf(i) === 'unknown');
-  const failedItems = listItems.filter((i) => stateOf(i) === 'error');
   const expanded = listItems.find((i) => i.id === expandedId) ?? null;
 
   /** 단건 폼과 같은 규칙으로 검사한다. 걸린 품목은 저장에서 빠진다. */
@@ -655,10 +767,6 @@ export function PromptIngredientStagingScreen({
   const targets = listItems.filter(
     (i) => !isBlank(i) && stateOf(i) !== 'success' && !invalidReason(i),
   );
-  const skipped = listItems.filter(
-    (i) => !isBlank(i) && stateOf(i) !== 'success' && invalidReason(i),
-  );
-  const priceless = skipped.filter((i) => i.price === 0);
   const isRetry = targets.length > 0 && targets.every((i) => stateOf(i) === 'error');
   const doneCount = targets.filter((i) => ['success', 'error'].includes(stateOf(i))).length;
   const total = targets.reduce((sum, i) => sum + i.price, 0);
@@ -779,7 +887,7 @@ export function PromptIngredientStagingScreen({
     if (problemCount === 0 && leftover.length === 0) {
       const savedTotal = usePromptIngredientStore.getState().lastSavedCount + successNames.length;
       reset();
-      Toast.success(`${savedTotal}개 저장했어요 · 가구원에게 알렸어요`);
+      Toast.success(`${savedTotal}개 저장했어요`);
       onComplete();
       return;
     }
@@ -792,11 +900,6 @@ export function PromptIngredientStagingScreen({
     setExpandedId(firstFailed?.id ?? null);
     setFocusId(null);
   }
-
-  const skippedNote =
-    priceless.length === skipped.length
-      ? `가격 없는 ${priceless.length}개는 빠져요`
-      : `${skipped.length}개는 빠져요`;
 
   let ctaLabel = targets.length > 0 ? `${targets.length}개 저장` : '저장';
   if (isSaving) ctaLabel = `저장 중... (${doneCount}/${targets.length})`;
@@ -844,9 +947,9 @@ export function PromptIngredientStagingScreen({
       {/* 화면 높이를 채우고 품목 목록을 아래(입력줄 쪽)부터 쌓는다. 품목이 적을 때도 누를 품목이 엄지가 편한 아래쪽에 온다. */}
       <div
         className={cn(
-          'flex min-h-[calc(100dvh-56px)] flex-col',
+          'relative flex min-h-[calc(100dvh-56px)] flex-col',
           // 되돌리기 알림이나 추천 칩이 떠도 마지막 품목이 가려지지 않게 하단 자리를 늘린다.
-          removed || chips.length > 0 ? 'pb-64' : 'pb-48',
+          removed || chips.length > 0 ? 'pb-56' : 'pb-40',
         )}
       >
         {/* 위(엄지가 닿기 어려운 곳)에는 드물게 바꾸는 것만 둔다. 첫 줄 [장보기 | 외식] 전환, 둘째 줄 새 품목의 날짜·구매처. */}
@@ -872,59 +975,38 @@ export function PromptIngredientStagingScreen({
             외식
           </button>
         </div>
-        {/* 새 품목 기본값. 값은 품목마다 두고, 여기서는 새 품목에 들어갈 값을 보여 주고 고친다. */}
-        <button
-          type="button"
-          aria-label="날짜·구매처 변경"
-          aria-expanded={defaultsOpen}
-          onClick={() => setDefaultsOpen((v) => !v)}
-          className="flex h-12 items-center justify-between px-5 text-left active:bg-[#F9FAFB]"
-        >
-          <span className={cn('text-[15px]', tone.label)}>날짜·구매처</span>
+        {/* 합계는 버튼 위 작은 글자 대신 맨 위에 크게 둔다(시안 v5). 그 아래 한 줄에 새 품목의 날짜와 구매처 버튼. */}
+        <div className="flex flex-col gap-3 px-5 pt-5 pb-4">
           <span
-            className={cn('flex min-w-0 items-center gap-0.5 text-[15px] font-medium', tone.text)}
+            data-total
+            className={cn(
+              'text-[28px] leading-tight font-bold tabular-nums',
+              targets.length > 0 ? tone.text : 'text-[#B0B8C1]',
+            )}
           >
-            <span className="truncate">
-              {longDate(defaults.date)} ·{' '}
-              {defaults.store || <span className={tone.hint}>구매처 없음</span>}
-            </span>
-            <ChevronRight
-              className={cn(
-                'size-4 shrink-0 transition-transform',
-                tone.hint,
-                defaultsOpen && 'rotate-90',
-              )}
-            />
+            {total.toLocaleString()}원
           </span>
-        </button>
-        {defaultsOpen ? (
-          <div className={cn('flex flex-col gap-2 px-5 py-3', tone.panel)}>
-            <div className="flex gap-2">
-              <SuggestInput
-                className="flex-1"
-                value={defaults.store}
-                onChange={(store) => changeDefaults({ store })}
-                options={storeNames}
-                placeholder="구매처"
-              />
-              <DatePicker
-                className="flex-1"
-                value={new Date(defaults.date)}
-                maxDate={new Date()}
-                onChange={(d) => d && changeDefaults({ date: format(d, 'yyyy-MM-dd') })}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setDefaultsOpen(false)}
-              className="h-10 self-end px-2 text-[15px] font-semibold text-emerald-700"
-            >
-              닫기
-            </button>
-          </div>
+          <PlaceChips
+            date={defaults.date}
+            store={defaults.store}
+            storeOptions={storeNames}
+            onChange={changeDefaults}
+          />
+        </div>
+
+        {/* 빈 안내는 화면 세로 정가운데에 둔다. 품목이 생기면 아래(입력줄 쪽)부터 쌓는다. */}
+        {listItems.length === 0 && unknownItems.length === 0 ? (
+          <p
+            className={cn(
+              'pointer-events-none absolute inset-x-0 top-[calc(50%-15px)] -translate-y-1/2 text-center text-[17px] font-semibold',
+              tone.sub,
+            )}
+          >
+            아직 담은 품목이 없어요
+          </p>
         ) : null}
 
-        {/* 아래 묶음: 저장 결과, 확인 필요, 빈 안내, 품목 목록. 모두 입력줄 쪽(엄지가 편한 곳)에 붙는다. */}
+        {/* 아래 묶음: 저장 결과, 확인 필요, 품목 목록. 모두 입력줄 쪽(엄지가 편한 곳)에 붙는다. */}
         <div className="mt-auto flex flex-col">
           {lastSavedCount > 0 && !isSaving ? (
             <div
@@ -933,9 +1015,7 @@ export function PromptIngredientStagingScreen({
               <span className="flex size-5 items-center justify-center rounded-full bg-emerald-600">
                 <Check className="size-3 text-white" strokeWidth={3} />
               </span>
-              {failedItems.length > 0
-                ? `${lastSavedCount}개를 저장했어요. 저장하지 못한 ${failedItems.length}개는 아래에 있어요`
-                : `${lastSavedCount}개를 저장했어요`}
+              {`${lastSavedCount}개를 저장했어요`}
             </div>
           ) : null}
 
@@ -945,9 +1025,7 @@ export function PromptIngredientStagingScreen({
                 <span className={cn('text-[15px] font-semibold', tone.text)}>
                   저장됐는지 확인해 주세요 · {unknownItems.length}개
                 </span>
-                <p className={cn('text-sm leading-relaxed', tone.sub)}>
-                  연결이 끊겨 저장됐는지 몰라요. 두 번 저장되지 않게 다시 저장에서 뺐어요.
-                </p>
+                <p className={cn('text-[15px]', tone.sub)}>연결이 끊겨 저장됐는지 몰라요</p>
               </div>
               {unknownItems.map((item) => (
                 <div key={item.id} className="flex flex-col gap-3">
@@ -978,15 +1056,6 @@ export function PromptIngredientStagingScreen({
                   </div>
                 </div>
               ))}
-            </div>
-          ) : null}
-
-          {listItems.length === 0 && unknownItems.length === 0 ? (
-            <div className="flex flex-col gap-1 px-5 pb-6 text-center">
-              <p className={cn('text-base font-semibold', tone.text)}>아직 담은 품목이 없어요</p>
-              <p className={cn('text-sm', tone.hint)}>
-                아래에 이름을 쓰거나 영수증을 찍으면 여기에 쌓여요
-              </p>
             </div>
           ) : null}
 
@@ -1087,7 +1156,8 @@ export function PromptIngredientStagingScreen({
       </div>
 
       {/* 하단 고정(엄지가 편한 곳): 되돌리기 → 추천 칩 → 입력줄 → 합계 → 저장. 왼쪽은 보조, 오른쪽 끝이 주 행동이다. */}
-      <div className="safe-area-padding-bottom fixed right-0 bottom-0 left-0 z-[var(--z-cta)] bg-white px-4 pt-2 pb-3">
+      {/* TDS BottomCTA처럼 화면 맨 아래에 고정하고, 아래 여백은 안전 영역과 20px 중 큰 값, 위는 흰색으로 흐려지는 배경이다. */}
+      <div className="fixed right-0 bottom-0 left-0 z-[var(--z-cta)] bg-[linear-gradient(to_top,#fff_88%,rgba(255,255,255,0))] px-4 pt-4 pb-[max(env(safe-area-inset-bottom),20px)]">
         <div className="mx-auto flex w-full max-w-[480px] flex-col gap-2">
           {removed ? (
             <div className="animate-in fade-in slide-in-from-bottom-2 flex h-12 items-center justify-between rounded-2xl bg-[#191F28] px-5 text-[15px] text-white">
@@ -1165,33 +1235,13 @@ export function PromptIngredientStagingScreen({
               영수증
             </button>
           </div>
-          {!isSaving && (targets.length > 0 || skipped.length > 0) ? (
-            <div className="flex items-baseline justify-between gap-2 px-1 pt-1">
-              {skipped.length > 0 ? (
-                <span className={cn('truncate text-sm font-medium', tone.orange)}>
-                  {skippedNote}
-                </span>
-              ) : (
-                <span className={cn('truncate text-[13px]', tone.hint)}>
-                  저장하면 가구원에게 알림이 한 번 가요
-                </span>
-              )}
-              <span className={cn('shrink-0 text-[15px] tabular-nums', tone.sub)}>
-                {targets.length > 0 ? (
-                  <>
-                    합계{' '}
-                    <b className={cn('font-semibold', tone.text)}>{total.toLocaleString()}원</b>
-                  </>
-                ) : null}
-              </span>
-            </div>
-          ) : null}
+          {/* 주 버튼은 앱 공용 하단 CTA(TDS FixedBottomCTA에 대응) 모양 그대로 쓴다. 입력줄은 그 위 topAccessory 자리다. */}
           <CTAPrimitive
             type="button"
             color="confirm"
             variant="filled"
             aria-live="polite"
-            className="h-14 rounded-2xl border-emerald-700 bg-emerald-700 text-[17px] active:bg-emerald-800 disabled:border-[#F2F4F6] disabled:bg-[#F2F4F6] disabled:text-[#B0B8C1]"
+            className="mt-1"
             onClick={saveAll}
             disabled={isSaving || targets.length === 0}
           >

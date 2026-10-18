@@ -55,9 +55,16 @@ const RECEIPT_ITEMS = [
   },
 ].map((item) => ({ ...item, store: '이마트', date: receiptDate() }));
 
+// 두 번째 영수증(시안 v5, 영수증 여러 장). 다른 가게, 이틀 전 날짜다.
+const RECEIPT_ITEMS_2 = [
+  { brand: '', product: '바나나', spec: '', unit: 'count', count: 1, price: 3980, category_code: 'fruit' },
+  { brand: '', product: '대파', spec: '1단', unit: 'count', count: 1, price: 2480, category_code: 'veggie' },
+  { brand: '', product: '두부', spec: '', unit: 'count', count: 2, price: 3000, category_code: 'tofu_legume' },
+].map((item) => ({ ...item, store: '홈플러스', date: receiptDate(2) }));
+
 // 영수증은 며칠 전 장보기다(직접 넣는 줄의 기본값 날짜·구매처와 다르게 읽힌 줄을 보여 준다).
-function receiptDate() {
-  const d = new Date(Date.now() + 9 * 3600_000 - 4 * 86400_000);
+function receiptDate(daysAgo = 4) {
+  const d = new Date(Date.now() + 9 * 3600_000 - daysAgo * 86400_000);
   return d.toISOString().slice(0, 10);
 }
 
@@ -85,6 +92,8 @@ export function createHandlers({ db, schema }) {
   let failSwitch = null;
   // 알림 요청 기록. 묶음 알림이 몇 번 갔는지 시험 출력에 쓴다.
   const notifyLog = [];
+  let receiptCalls = 0;
+  const nextReceipt = () => (receiptCalls++ % 2 === 0 ? RECEIPT_ITEMS : RECEIPT_ITEMS_2);
 
   return [
     http.post('*/mock/switch', async ({ request }) => {
@@ -128,13 +137,14 @@ export function createHandlers({ db, schema }) {
       return HttpResponse.json({ ok: true, mocked: true });
     }),
 
+    // 영수증 인식은 부를 때마다 이마트 → 홈플러스 순으로 번갈아 답한다(여러 장 시험용).
     http.post('*/anthropic/v1/messages', () =>
       HttpResponse.json({
         id: 'msg_mock_receipt',
         type: 'message',
         role: 'assistant',
         model: 'claude-sonnet-5',
-        content: [{ type: 'text', text: JSON.stringify({ items: RECEIPT_ITEMS }) }],
+        content: [{ type: 'text', text: JSON.stringify({ items: nextReceipt() }) }],
         stop_reason: 'end_turn',
         stop_sequence: null,
         usage: { input_tokens: 0, output_tokens: 0 },
