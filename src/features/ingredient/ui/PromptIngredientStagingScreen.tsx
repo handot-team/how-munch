@@ -6,9 +6,9 @@ import { format } from 'date-fns';
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
   ChevronLeft,
   Loader2,
-  Pencil,
   Plus,
   ScanText,
   Trash2,
@@ -18,7 +18,17 @@ import { AppScreen } from '@stackflow/plugin-basic-ui';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { cn } from '@/commons/lib';
-import { Button, Counter, CTAButton, DatePicker, Input, Select, Toast } from '@/commons/ui';
+import {
+  Button,
+  Chip,
+  ChipRow,
+  Counter,
+  CTAPrimitive,
+  DatePicker,
+  Input,
+  Select,
+  Toast,
+} from '@/commons/ui';
 
 import {
   formatIngredientAmount,
@@ -51,7 +61,7 @@ interface PromptIngredientStagingScreenProps {
   userId: string;
   /** 품목명 제안(검색 화면과 같은 목록) */
   suggestions?: string[];
-  /** 영수증 화면 열기. 인식이 끝나면 이 화면으로 돌아와 같은 목록에 줄이 붙는다 */
+  /** 영수증 화면 열기. 인식이 끝나면 이 화면으로 돌아와 같은 목록에 품목이 붙는다 */
   onOpenReceipt: () => void;
 }
 
@@ -124,11 +134,6 @@ function newLine(defaults: LineDefaults, categoryId: string): StagedItem {
 
 const isBlank = (item: StagedItem) => item.source === 'direct' && !item.name.trim();
 
-function shortDate(date: string) {
-  const [, m, d] = date.split('-');
-  return `${Number(m)}/${Number(d)}`;
-}
-
 function longDate(date: string) {
   const [, m, d] = date.split('-');
   return `${Number(m)}월 ${Number(d)}일`;
@@ -153,19 +158,6 @@ function SaveStateIcon({ state }: { state: SaveState }) {
     );
   }
   return null;
-}
-
-function SourceTag({ source }: { source?: StagedItem['source'] }) {
-  return (
-    <span
-      className={cn(
-        'shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium',
-        source === 'direct' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700',
-      )}
-    >
-      {source === 'direct' ? '직접 입력' : '영수증'}
-    </span>
-  );
 }
 
 const getNameTexts = (name: string) => [name];
@@ -286,10 +278,24 @@ function PriceField({
   );
 }
 
+/** 받침이 있으면 '을', 없으면 '를' */
+function objectParticle(word: string) {
+  const last = word.trim().slice(-1);
+  const code = last.charCodeAt(0);
+  if (code < 0xac00 || code > 0xd7a3) return '를';
+  return (code - 0xac00) % 28 === 0 ? '를' : '을';
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <span className="w-10 shrink-0 text-xs font-medium text-gray-500">{children}</span>;
+}
+
 /**
- * 펼친 줄. 위 단은 품목명 | 가격, 아래 단은 나머지 칸 요약 한 줄이고 누르면 그 자리에서 펴진다.
+ * 펼친 품목. 두 단계로 펼친다.
+ * - 새 품목: 품목명 | 가격과 요약 한 줄("기타 · 1개 · 브랜드 없음 ⌄")만. 요약 줄을 누르면 다 펼친다.
+ * - 이미 넣은 품목(접힌 카드를 누름)·실패 품목: 품목명 | 가격, 수량, 분류, 브랜드, 구매처·날짜, 삭제까지 모두.
  */
-function ExpandedLine({
+function ExpandedItem({
   item,
   categories,
   nameOptions,
@@ -298,6 +304,8 @@ function ExpandedLine({
   state,
   error,
   autoFocusName,
+  detailOpen,
+  onOpenDetail,
   onChange,
   onRemove,
   onNext,
@@ -310,14 +318,31 @@ function ExpandedLine({
   state: SaveState;
   error?: string;
   autoFocusName: boolean;
+  /** 새 품목은 품목명 | 가격과 요약 한 줄만 보인다(자판이 올라와도 카드가 화면에 들어가게). */
+  detailOpen: boolean;
+  onOpenDetail: () => void;
   onChange: (updates: Partial<StagedItem>) => void;
   onRemove: () => void;
   onNext: () => void;
 }) {
-  const [detailOpen, setDetailOpen] = useState(false);
+  const [placeOpen, setPlaceOpen] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const priceRef = useRef<HTMLInputElement>(null);
-  const cat = categories.find((c) => c.id === item.category_id);
+  const chipsRef = useRef<HTMLDivElement>(null);
+
+  // 고른 분류가 칩 줄 밖에 있으면 보이는 자리로 옮긴다(페이지는 움직이지 않는다).
+  useEffect(
+    function showSelectedCategory() {
+      const row = chipsRef.current?.querySelector<HTMLElement>('[data-slot=chip-row]');
+      const chip = row?.querySelector<HTMLElement>('[aria-checked=true]');
+      if (!row || !chip) return;
+      const left = chip.offsetLeft - row.offsetLeft;
+      if (left + chip.offsetWidth > row.scrollLeft + row.clientWidth || left < row.scrollLeft) {
+        row.scrollLeft = Math.max(0, left - 8);
+      }
+    },
+    [item.id, item.category_id, categories.length],
+  );
 
   useEffect(
     function focusNameOnOpen() {
@@ -328,16 +353,11 @@ function ExpandedLine({
     [autoFocusName, item.id],
   );
 
-  const summary = [
-    cat?.label ?? '기타',
-    formatIngredientAmount(item.count, item.unit, true),
-    item.brand || '브랜드',
-  ];
-
   return (
     <div
+      data-expanded-item
       className={cn(
-        'flex flex-col gap-2 rounded-xl border-2 border-emerald-500 p-3',
+        'flex flex-col gap-3 rounded-xl border-2 border-emerald-500 p-3',
         state === 'error' ? 'bg-[oklch(0.97_0.03_25)]' : 'bg-white',
       )}
     >
@@ -359,128 +379,150 @@ function ExpandedLine({
         />
       </div>
 
-      <button
-        type="button"
-        onClick={() => setDetailOpen((v) => !v)}
-        className="flex items-center gap-1.5 self-start rounded px-1 py-0.5 text-xs text-gray-500 active:bg-gray-100"
-      >
-        <SourceTag source={item.source} />
-        <span className="truncate">
-          {cat?.emoji ? (
-            <span className="font-tossface mr-0.5" aria-hidden>
-              {cat.emoji}
-            </span>
-          ) : null}
-          {summary.join(' · ')}
+      {state === 'error' ? (
+        <span className="text-xs font-medium text-red-600">
+          저장하지 못했어요. {error || '다시 저장해 주세요'}
         </span>
-        <Pencil className="size-3 shrink-0" />
-      </button>
-
-      {state === 'error' && error ? (
-        <span className="text-xs font-medium text-red-600">저장 실패 · {error}</span>
       ) : null}
 
+      {detailOpen ? null : (
+        <button
+          type="button"
+          onClick={onOpenDetail}
+          className="flex items-center gap-1 self-start rounded px-1 py-0.5 text-xs text-gray-500 active:bg-gray-100"
+        >
+          {[
+            categories.find((c) => c.id === item.category_id)?.label ?? '기타',
+            formatIngredientAmount(item.count, item.unit, true),
+            item.brand || '브랜드 없음',
+          ].join(' · ')}
+          <ChevronDown className="size-3.5" />
+        </button>
+      )}
+
       {detailOpen ? (
-        <div className="flex flex-col gap-3 border-t border-gray-100 pt-3">
-          <div className="flex gap-2">
-            <div className="flex flex-1 flex-col gap-1">
-              <span className="text-xs text-gray-500">분류</span>
-              <Select
-                value={item.category_id}
-                onValueChange={(category_id) => onChange({ category_id })}
-              >
-                <Select.Trigger>
-                  <Select.Value placeholder="분류" />
-                </Select.Trigger>
-                <Select.Content>
-                  {categories.map((c) => (
-                    <Select.Item key={c.id} value={c.id}>
-                      {c.emoji} {c.label}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-gray-500">수량</span>
-              <div className="flex gap-1.5">
-                <Counter
-                  key={`count-${item.unit}`}
-                  className="w-28"
-                  value={item.count}
-                  min={resolveAmountMin(item.unit)}
-                  step={resolveAmountStep(item.unit)}
-                  onValueChange={(n) => onChange({ count: normalizeAmountByUnit(n, item.unit) })}
-                />
-                <Select
-                  value={item.unit}
-                  onValueChange={(u) =>
-                    onChange({
-                      unit: u as IngredientUnit,
-                      count: resolveAmountMin(u as IngredientUnit),
-                    })
-                  }
-                >
-                  <Select.Trigger className="w-16">
-                    <Select.Value />
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Item value="count">개</Select.Item>
-                    <Select.Item value="g">g</Select.Item>
-                    <Select.Item value="kg">kg</Select.Item>
-                    <Select.Item value="ml">ml</Select.Item>
-                    <Select.Item value="l">L</Select.Item>
-                  </Select.Content>
-                </Select>
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-gray-500">브랜드</span>
-            <SuggestInput
-              value={item.brand}
-              onChange={(brand) => onChange({ brand })}
-              options={brandOptions}
-              placeholder="예: 풀무원"
+        <>
+          <div className="flex items-center gap-2">
+            <FieldLabel>수량</FieldLabel>
+            <Counter
+              key={`count-${item.unit}`}
+              className="w-36"
+              value={item.count}
+              min={resolveAmountMin(item.unit)}
+              step={resolveAmountStep(item.unit)}
+              onValueChange={(n) => onChange({ count: normalizeAmountByUnit(n, item.unit) })}
             />
+            <Select
+              value={item.unit}
+              onValueChange={(u) =>
+                onChange({
+                  unit: u as IngredientUnit,
+                  count: resolveAmountMin(u as IngredientUnit),
+                })
+              }
+            >
+              <Select.Trigger className="w-16">
+                <Select.Value />
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value="count">개</Select.Item>
+                <Select.Item value="g">g</Select.Item>
+                <Select.Item value="kg">kg</Select.Item>
+                <Select.Item value="ml">ml</Select.Item>
+                <Select.Item value="l">L</Select.Item>
+              </Select.Content>
+            </Select>
           </div>
-          <div className="flex gap-2">
-            <div className="flex flex-1 flex-col gap-1">
-              <span className="text-xs text-gray-500">날짜</span>
-              <DatePicker
-                value={new Date(item.date)}
-                maxDate={new Date()}
-                onChange={(d) => d && onChange({ date: format(d, 'yyyy-MM-dd') })}
-              />
-            </div>
-            <div className="flex flex-1 flex-col gap-1">
-              <span className="text-xs text-gray-500">구매처</span>
-              <SuggestInput
-                value={item.store}
-                onChange={(store) => onChange({ store })}
-                options={storeOptions}
-                placeholder="구매처"
-              />
-            </div>
+
+          <div ref={chipsRef} className="flex items-center gap-2">
+            <FieldLabel>분류</FieldLabel>
+            <ChipRow className="pb-0">
+              {categories.map((c) => (
+                <Chip
+                  key={c.id}
+                  selected={c.id === item.category_id}
+                  onClick={() => onChange({ category_id: c.id })}
+                  className="px-2.5 py-1 text-[13px]"
+                >
+                  {c.emoji ? (
+                    <span className="font-tossface" aria-hidden>
+                      {c.emoji}
+                    </span>
+                  ) : null}
+                  {c.label}
+                </Chip>
+              ))}
+            </ChipRow>
           </div>
-          <button
-            type="button"
-            onClick={onRemove}
-            className="flex items-center gap-1 self-end text-xs font-medium text-gray-400"
-          >
-            <Trash2 className="size-3.5" />이 줄 지우기
-          </button>
-        </div>
+
+          <SuggestInput
+            value={item.brand}
+            onChange={(brand) => onChange({ brand })}
+            options={brandOptions}
+            placeholder="브랜드 (선택)"
+          />
+
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between text-sm text-gray-700">
+              <span className="truncate">
+                {item.store || <span className="text-gray-400">구매처 선택</span>} ·{' '}
+                {longDate(item.date)}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPlaceOpen((v) => !v)}
+                className="shrink-0 px-1 py-0.5 text-xs font-medium text-gray-500"
+              >
+                {placeOpen ? '닫기' : '변경'}
+              </button>
+            </div>
+            {placeOpen ? (
+              <div className="flex gap-2">
+                <SuggestInput
+                  className="flex-1"
+                  value={item.store}
+                  onChange={(store) => onChange({ store })}
+                  options={storeOptions}
+                  placeholder="구매처"
+                />
+                <DatePicker
+                  className="flex-1"
+                  value={new Date(item.date)}
+                  maxDate={new Date()}
+                  onChange={(d) => d && onChange({ date: format(d, 'yyyy-MM-dd') })}
+                />
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex items-center justify-end gap-2 border-t border-gray-100 pt-2">
+            <button
+              type="button"
+              onClick={onRemove}
+              className="flex shrink-0 items-center gap-1 px-1 py-0.5 text-xs font-medium text-gray-400"
+            >
+              <Trash2 className="size-3.5" />
+              삭제
+            </button>
+          </div>
+        </>
       ) : null}
     </div>
   );
 }
 
+interface Removed {
+  item: StagedItem;
+  index: number;
+  state: SaveState;
+  error?: string;
+}
+
 /**
- * 장보기 추가. 입구는 하나이고, 이 화면이 곧 담은 목록이다.
- * 펼친 줄은 늘 하나, 나머지는 접힌 줄이며 "+ 한 줄 더"로 줄을 늘리고 "영수증으로 채우기"로 읽은 줄을 같은 목록에 붙인다.
- * 하단 버튼 숫자는 지금 누르면 저장되는 줄 수다. 실패한 줄은 사유와 함께 남아 그 줄만 다시 저장하고,
- * 응답이 끊긴 줄은 "저장 확인 필요"로 따로 둔다.
+ * 장보기 추가. 입구는 하나이고, 이 화면이 곧 품목 목록이다.
+ * 펼친 품목은 늘 하나, 나머지는 접힌 카드이며 "+ 품목 추가"로 품목을 늘리고 영수증으로 읽은 품목도 같은 목록에 붙는다.
+ * 하단 버튼 숫자는 지금 누르면 저장되는 품목 수다. 실패한 품목은 사유와 함께 남아 그것만 다시 저장하고,
+ * 응답이 끊긴 품목은 "저장됐는지 확인이 필요해요"로 따로 둔다.
  */
 export function PromptIngredientStagingScreen({
   onClose,
@@ -520,8 +562,11 @@ export function PromptIngredientStagingScreen({
   const [defaultsOpen, setDefaultsOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
+  /** 펼친 품목이 새 품목이라 요약 한 줄만 보이는지 */
+  const [compact, setCompact] = useState(true);
+  const [removed, setRemoved] = useState<Removed | null>(null);
 
-  // 처음 열면 빈 줄 하나를 펴 두고 품목명에 커서를 둔다. 지난번에 비워 둔 줄은 치운다.
+  // 처음 열면 빈 품목 하나를 펴 두고 품목명에 커서를 둔다. 지난번에 비워 둔 품목은 치운다.
   useEffect(
     function openFirstLine() {
       if (categories.length === 0 || expandedId) return;
@@ -531,10 +576,21 @@ export function PromptIngredientStagingScreen({
       const line = newLine(defaults, defaultCategoryId);
       store.addItems([line]);
       setExpandedId(line.id);
+      setCompact(true);
       setFocusId(line.id);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [categories.length],
+  );
+
+  // 되돌리기 안내는 5초 뒤 사라진다.
+  useEffect(
+    function hideUndoLater() {
+      if (!removed) return;
+      const timer = window.setTimeout(() => setRemoved(null), 5000);
+      return () => window.clearTimeout(timer);
+    },
+    [removed],
   );
 
   const stateOf = (item: StagedItem) => saveStates[item.id] ?? 'idle';
@@ -544,26 +600,31 @@ export function PromptIngredientStagingScreen({
   const failedItems = listItems.filter((i) => stateOf(i) === 'error');
   const expanded = listItems.find((i) => i.id === expandedId) ?? null;
 
-  /** 단건 폼과 같은 규칙으로 검사한다. 걸린 줄은 사유와 함께 저장에서 빠진다. */
+  /** 단건 폼과 같은 규칙으로 검사한다. 걸린 품목은 저장에서 빠진다. */
   function invalidReason(item: StagedItem): string | null {
     if (categories.length === 0) return null;
     const result = schema.safeParse(item);
     if (result.success) return null;
     const issue = result.error.issues[0];
     if (issue.path[0] === 'price' && item.price === 0) {
-      return item.source === 'receipt' ? '가격을 못 읽었어요 · 눌러서 입력' : '가격을 넣어 주세요';
+      return item.source === 'receipt'
+        ? '가격을 못 읽었어요. 눌러서 입력해 주세요'
+        : '가격이 없어요. 눌러서 입력해 주세요';
     }
     return issue.message;
   }
 
-  // 품목명이 빈 줄은 사유 없이 빠진다(아직 쓰는 중인 새 줄).
+  // 품목명이 빈 품목은 사유 없이 빠진다(아직 쓰는 중인 새 품목).
   const targets = listItems.filter(
     (i) => !isBlank(i) && stateOf(i) !== 'success' && !invalidReason(i),
   );
+  const skipped = listItems.filter(
+    (i) => !isBlank(i) && stateOf(i) !== 'success' && invalidReason(i),
+  );
+  const priceless = skipped.filter((i) => i.price === 0);
   const isRetry = targets.length > 0 && targets.every((i) => stateOf(i) === 'error');
   const doneCount = targets.filter((i) => ['success', 'error'].includes(stateOf(i))).length;
-  const filled = listItems.filter((i) => !isBlank(i));
-  const total = filled.reduce((sum, i) => sum + i.price, 0);
+  const total = targets.reduce((sum, i) => sum + i.price, 0);
 
   function resolveCategory(item: StagedItem) {
     const cat = categories.find((c) => c.id === item.category_id);
@@ -574,7 +635,7 @@ export function PromptIngredientStagingScreen({
     return item.store !== defaults.store || item.date !== defaults.date;
   }
 
-  /** 펼친 줄을 접는다. 아무것도 안 쓴 줄은 접지 않고 치운다. */
+  /** 펼친 품목을 접는다. 아무것도 안 쓴 품목은 접지 않고 치운다. */
   function collapseCurrent() {
     if (expanded && isBlank(expanded)) removeItems([expanded.id]);
     setExpandedId(null);
@@ -584,24 +645,50 @@ export function PromptIngredientStagingScreen({
     if (isSaving || item.id === expandedId) return;
     collapseCurrent();
     setExpandedId(item.id);
+    setCompact(false);
     setFocusId(null);
   }
 
   function addLine() {
     if (isSaving) return;
-    // 품목명이 빈 줄이 펼쳐져 있으면 새 줄을 만들지 않고 그 칸으로 돌려보낸다.
+    // 품목명이 빈 품목이 펼쳐져 있으면 새로 만들지 않고 그 칸으로 돌려보낸다.
     if (expanded && isBlank(expanded)) {
       setFocusId(null);
       window.setTimeout(() => setFocusId(expanded.id), 0);
       return;
     }
-    // 날짜·구매처·분류는 앞 줄 값을 이어받는다. 맨 위 기본값도 그 값으로 따라간다.
+    // 날짜·구매처·분류는 앞 품목 값을 이어받는다. 맨 위 기본값도 그 값으로 따라간다.
     const next = expanded ? { date: expanded.date, store: expanded.store } : defaults;
     setDefaults(next);
     const line = newLine(next, expanded?.category_id ?? defaultCategoryId);
     addItems([line]);
     setExpandedId(line.id);
+    setCompact(true);
     setFocusId(line.id);
+  }
+
+  function removeLine(item: StagedItem) {
+    const index = usePromptIngredientStore.getState().items.findIndex((i) => i.id === item.id);
+    setRemoved({ item, index, state: stateOf(item), error: errors[item.id] });
+    removeItems([item.id]);
+    if (item.id === expandedId) setExpandedId(null);
+  }
+
+  /** 지운 품목을 원래 자리로 되돌린다. */
+  function undoRemove() {
+    if (!removed) return;
+    const { item, index, state, error } = removed;
+    usePromptIngredientStore.setState((prev) => {
+      const nextItems = [...prev.items];
+      nextItems.splice(Math.min(index, nextItems.length), 0, item);
+      return {
+        items: nextItems,
+        checkedIds: [...prev.checkedIds, item.id],
+        saveStates: { ...prev.saveStates, [item.id]: state },
+        errors: error ? { ...prev.errors, [item.id]: error } : prev.errors,
+      };
+    });
+    setRemoved(null);
   }
 
   function openReceipt() {
@@ -611,7 +698,7 @@ export function PromptIngredientStagingScreen({
   }
 
   function changeDefaults(updates: Partial<LineDefaults>) {
-    // 펼친 새 줄이 기본값을 쓰고 있으면 같이 바꾼다.
+    // 펼친 새 품목이 기본값을 쓰고 있으면 같이 바꾼다.
     if (expanded && expanded.source === 'direct' && !differsFromDefaults(expanded)) {
       updateItem(expanded.id, updates);
     }
@@ -620,6 +707,7 @@ export function PromptIngredientStagingScreen({
 
   async function saveAll() {
     if (isSaving || targets.length === 0) return;
+    setRemoved(null);
     const batch = [...targets];
     const successNames: string[] = [];
     const successIds: string[] = [];
@@ -658,45 +746,25 @@ export function PromptIngredientStagingScreen({
     if (problemCount === 0 && leftover.length === 0) {
       const savedTotal = usePromptIngredientStore.getState().lastSavedCount + successNames.length;
       reset();
-      Toast.success(
-        savedTotal === 1 ? '장보기 1건을 저장했어요' : `${savedTotal}건을 모두 저장했어요`,
-      );
+      Toast.success(`품목 ${savedTotal}개를 저장했어요`);
       onComplete();
       return;
     }
-    // 저장된 줄과 빈 줄은 목록에서 빼고, 남은 줄(실패, 확인 필요, 아직 안 고친 줄)만 접어서 둔다.
+    // 저장된 품목과 빈 품목은 목록에서 빼고, 남은 품목(실패, 확인 필요, 아직 안 고친 품목)만 접어서 둔다.
     removeItems([...successIds, ...blankIds]);
     addSavedCount(successNames.length);
-    setExpandedId(null);
+    // 실패한 품목은 펼쳐서 사유와 고칠 칸을 바로 보인다.
+    const firstFailed = usePromptIngredientStore
+      .getState()
+      .items.find((i) => usePromptIngredientStore.getState().saveStates[i.id] === 'error');
+    setExpandedId(firstFailed?.id ?? null);
+    setCompact(false);
+    setFocusId(null);
   }
 
-  let ctaLabel = targets.length > 0 ? `${targets.length}건 저장` : '저장';
+  let ctaLabel = targets.length > 0 ? `품목 ${targets.length}개 저장하기` : '저장';
   if (isSaving) ctaLabel = `저장 중... (${doneCount}/${targets.length})`;
-  else if (isRetry) ctaLabel = `실패 ${targets.length}건 다시 저장`;
-
-  const addButtons = (
-    <div className="grid grid-cols-2 gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        className="h-11"
-        onClick={addLine}
-        disabled={isSaving}
-      >
-        <Plus className="size-4" />한 줄 더
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        className="h-11"
-        onClick={openReceipt}
-        disabled={isSaving}
-      >
-        <ScanText className="size-4" />
-        영수증으로 채우기
-      </Button>
-    </div>
-  );
+  else if (isRetry) ctaLabel = `실패한 ${targets.length}개 다시 저장하기`;
 
   return (
     <AppScreen
@@ -719,21 +787,21 @@ export function PromptIngredientStagingScreen({
         },
       }}
     >
-      <div className="flex flex-col gap-2 px-4 pt-3 pb-28">
-        {/* 새 줄 기본값. 값은 줄마다 두고, 여기서는 새 줄에 들어갈 값을 보여 주고 고친다. */}
-        <button
-          type="button"
-          onClick={() => setDefaultsOpen((v) => !v)}
-          className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-left"
-        >
+      <div className="flex flex-col gap-2 px-4 pt-3 pb-40">
+        {/* 새 품목 기본값. 값은 품목마다 두고, 여기서는 새 품목에 들어갈 값을 보여 주고 고친다. */}
+        <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5">
           <span className="text-sm font-medium text-gray-800">
-            {longDate(defaults.date)} · {defaults.store || '구매처 없음'}
+            {longDate(defaults.date)} ·{' '}
+            {defaults.store || <span className="text-gray-400">구매처 선택</span>}
           </span>
-          <span className="flex items-center gap-2 text-xs text-gray-500">
-            {filled.length > 0 ? `${filled.length}줄 · ${total.toLocaleString()}원` : null}
-            <Pencil className="size-3.5" />
-          </span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setDefaultsOpen((v) => !v)}
+            className="shrink-0 px-1 py-0.5 text-xs font-medium text-gray-500"
+          >
+            {defaultsOpen ? '닫기' : '변경'}
+          </button>
+        </div>
         {defaultsOpen ? (
           <div className="flex gap-2 rounded-lg border border-gray-100 p-2">
             <DatePicker
@@ -755,115 +823,25 @@ export function PromptIngredientStagingScreen({
         {lastSavedCount > 0 && !isSaving ? (
           <div className="flex items-center gap-2 rounded-lg bg-[oklch(0.96_0.05_145)] px-3 py-2.5 text-sm font-medium text-green-800">
             <Check className="size-4" strokeWidth={3} />
-            {lastSavedCount}건을 저장했어요
-            {failedItems.length > 0 ? ` · 실패 ${failedItems.length}건은 아래에 남겼어요` : ''}
+            {failedItems.length > 0
+              ? `${lastSavedCount}개를 저장했어요. 저장하지 못한 ${failedItems.length}개는 아래에 있어요`
+              : `${lastSavedCount}개를 저장했어요`}
           </div>
         ) : null}
 
-        {listItems.map((item) => {
-          const state = stateOf(item);
-          if (item.id === expandedId) {
-            return (
-              <div key={item.id} className="flex flex-col gap-2">
-                <ExpandedLine
-                  item={item}
-                  categories={categories}
-                  nameOptions={suggestions}
-                  brandOptions={brandNames}
-                  storeOptions={storeNames}
-                  state={state}
-                  error={errors[item.id]}
-                  autoFocusName={focusId === item.id}
-                  onChange={(updates) => updateItem(item.id, updates)}
-                  onRemove={() => {
-                    removeItems([item.id]);
-                    setExpandedId(null);
-                  }}
-                  onNext={addLine}
-                />
-                {addButtons}
-              </div>
-            );
-          }
-
-          const reason = invalidReason(item);
-          const cat = resolveCategory(item);
-          const showIcon = state === 'saving' || state === 'success';
-          const isPriceUnknown = item.price === 0;
-
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => expandLine(item)}
-              disabled={isSaving}
-              className={cn(
-                'flex flex-col gap-1 rounded-lg border px-3 py-2 text-left',
-                'transition-[background-color] duration-500 ease-out',
-                rowBg[state],
-              )}
-            >
-              <div className="flex items-center gap-2">
-                {showIcon ? <SaveStateIcon state={state} /> : null}
-                <span className="min-w-0 flex-1 truncate text-sm text-gray-900">
-                  {item.brand ? <span className="mr-1 text-gray-400">{item.brand}</span> : null}
-                  {item.name}
-                </span>
-                <span
-                  className={cn(
-                    'shrink-0 text-sm font-semibold',
-                    isPriceUnknown ? 'text-orange-500' : 'text-gray-900',
-                  )}
-                >
-                  {isPriceUnknown ? '금액 모름' : `${item.price.toLocaleString()}원`}
-                </span>
-              </div>
-              <div className="flex min-w-0 items-center gap-1.5 text-xs text-gray-500">
-                <SourceTag source={item.source} />
-                <span className="shrink-0">
-                  {cat.emoji ? (
-                    <span className="font-tossface mr-0.5" aria-hidden>
-                      {cat.emoji}
-                    </span>
-                  ) : null}
-                  {cat.label} · {formatIngredientAmount(item.count, item.unit, true)}
-                </span>
-                {differsFromDefaults(item) ? (
-                  <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-600">
-                    {item.store || '구매처 없음'}·{shortDate(item.date)}
-                  </span>
-                ) : null}
-              </div>
-              {state === 'error' ? (
-                <span className="text-xs font-medium text-red-600">
-                  저장 실패 · {errors[item.id]}
-                </span>
-              ) : null}
-              {state !== 'error' && reason ? (
-                <span className="text-xs font-medium text-orange-500">
-                  {reason} · 저장에서 빠져요
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-
-        {expanded ? null : addButtons}
-
         {unknownItems.length > 0 ? (
-          <div className="mt-2 flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
+          <div className="flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
             <div className="flex items-center gap-1.5 text-sm font-semibold text-amber-800">
               <AlertTriangle className="size-4" />
-              저장 확인 필요 {unknownItems.length}건
+              저장됐는지 확인해 주세요 · {unknownItems.length}개
             </div>
             <p className="text-xs leading-relaxed text-amber-800">
-              응답이 끊겨 저장됐는지 알 수 없어요. 다시 저장하면 두 번 들어갈 수 있어 다시 저장에서
-              뺐어요. 장보기 내역에서 확인해 주세요.
+              연결이 끊겨 저장됐는지 몰라요. 두 번 저장되지 않게 다시 저장에서 뺐어요.
             </p>
             {unknownItems.map((item) => (
               <div key={item.id} className="flex flex-col gap-1.5 rounded-lg bg-white px-3 py-2.5">
                 <div className="flex items-center justify-between text-sm">
-                  <span>{item.name}</span>
+                  <span className="font-semibold">{item.name}</span>
                   <span className="font-semibold">{item.price.toLocaleString()}원</span>
                 </div>
                 <div className="flex gap-2">
@@ -877,7 +855,7 @@ export function PromptIngredientStagingScreen({
                       onComplete();
                     }}
                   >
-                    내역에서 확인
+                    내역 보기
                   </Button>
                   <Button
                     type="button"
@@ -886,24 +864,155 @@ export function PromptIngredientStagingScreen({
                     className="flex-1"
                     onClick={() => removeItems([item.id])}
                   >
-                    저장됐어요, 빼기
+                    확인했어요
                   </Button>
                 </div>
               </div>
             ))}
           </div>
         ) : null}
+
+        {listItems.map((item) => {
+          const state = stateOf(item);
+          if (item.id === expandedId) {
+            return (
+              <ExpandedItem
+                key={item.id}
+                item={item}
+                categories={categories}
+                nameOptions={suggestions}
+                brandOptions={brandNames}
+                storeOptions={storeNames}
+                state={state}
+                error={errors[item.id]}
+                autoFocusName={focusId === item.id}
+                detailOpen={!compact || state === 'error'}
+                onOpenDetail={() => setCompact(false)}
+                onChange={(updates) => updateItem(item.id, updates)}
+                onRemove={() => removeLine(item)}
+                onNext={addLine}
+              />
+            );
+          }
+
+          const reason = invalidReason(item);
+          const cat = resolveCategory(item);
+          const showIcon = state === 'saving' || state === 'success';
+          const isPriceUnknown = item.price === 0;
+          const meta = [cat.label, formatIngredientAmount(item.count, item.unit, true)];
+          if (item.brand) meta.push(item.brand);
+          if (differsFromDefaults(item)) {
+            meta.push(`${item.store || '구매처 없음'} · ${longDate(item.date)}`);
+          }
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => expandLine(item)}
+              disabled={isSaving}
+              className={cn(
+                'flex flex-col gap-1 rounded-xl border px-3 py-2.5 text-left',
+                'transition-[background-color] duration-500 ease-out',
+                rowBg[state],
+              )}
+            >
+              <div className="flex items-center gap-2">
+                {showIcon ? <SaveStateIcon state={state} /> : null}
+                <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-gray-900">
+                  {item.name}
+                </span>
+                <span
+                  className={cn(
+                    'shrink-0 text-sm',
+                    isPriceUnknown ? 'font-medium text-orange-500' : 'font-semibold text-gray-900',
+                  )}
+                >
+                  {isPriceUnknown ? '가격 없음' : `${item.price.toLocaleString()}원`}
+                </span>
+              </div>
+              <div className="flex min-w-0 items-center gap-1.5 text-xs text-gray-500">
+                <span className="min-w-0 truncate">{meta.join(' · ')}</span>
+                {item.source === 'receipt' ? (
+                  <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500">
+                    영수증
+                  </span>
+                ) : null}
+              </div>
+              {state === 'error' ? (
+                <span className="text-xs font-medium text-red-600">
+                  저장하지 못했어요. {errors[item.id] || '다시 저장해 주세요'}
+                </span>
+              ) : null}
+              {state !== 'error' && reason ? (
+                <span className="text-xs font-medium text-orange-500">{reason}</span>
+              ) : null}
+            </button>
+          );
+        })}
+
+        <button
+          type="button"
+          onClick={addLine}
+          disabled={isSaving}
+          className="flex h-12 items-center justify-center gap-1 rounded-xl border border-dashed border-gray-300 text-sm font-semibold text-emerald-600 active:bg-gray-50"
+        >
+          <Plus className="size-4" />
+          품목 추가
+        </button>
+        <button
+          type="button"
+          onClick={openReceipt}
+          disabled={isSaving}
+          className="flex items-center justify-center gap-1.5 self-center px-2 py-2 text-sm text-gray-500"
+        >
+          <ScanText className="size-4" />
+          영수증으로 추가
+        </button>
       </div>
 
-      <CTAButton
-        type="button"
-        color="confirm"
-        variant="filled"
-        onClick={saveAll}
-        disabled={isSaving || targets.length === 0}
-      >
-        {ctaLabel}
-      </CTAButton>
+      <div className="safe-area-padding-bottom fixed right-0 bottom-0 left-0 z-[var(--z-cta)] bg-white px-4 pt-2 pb-3 shadow-[0_-8px_16px_-8px_rgba(0,0,0,0.06)]">
+        <div className="mx-auto flex w-full max-w-[480px] flex-col gap-2">
+          {removed ? (
+            <div className="animate-in fade-in slide-in-from-bottom-2 flex items-center justify-between rounded-xl bg-gray-800 px-4 py-3 text-sm text-white shadow-lg">
+              <span className="min-w-0 truncate">
+                {removed.item.name.trim() || '빈 품목'}
+                {removed.item.name.trim() ? objectParticle(removed.item.name) : '을'} 삭제했어요
+              </span>
+              <button
+                type="button"
+                onClick={undoRemove}
+                className="shrink-0 pl-3 font-semibold text-emerald-300"
+              >
+                되돌리기
+              </button>
+            </div>
+          ) : null}
+          {(targets.length > 0 || skipped.length > 0) && !isSaving ? (
+            <div className="flex items-center justify-between gap-2 px-1 text-xs">
+              <span className="text-gray-500">
+                {targets.length > 0 ? `합계 ${total.toLocaleString()}원` : null}
+              </span>
+              {skipped.length > 0 ? (
+                <span className="font-medium text-orange-500">
+                  {priceless.length === skipped.length
+                    ? `가격 없는 ${priceless.length}개는 저장에서 빠져요`
+                    : `${skipped.length}개는 저장에서 빠져요`}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          <CTAPrimitive
+            type="button"
+            color="confirm"
+            variant="filled"
+            onClick={saveAll}
+            disabled={isSaving || targets.length === 0}
+          >
+            {ctaLabel}
+          </CTAPrimitive>
+        </div>
+      </div>
     </AppScreen>
   );
 }

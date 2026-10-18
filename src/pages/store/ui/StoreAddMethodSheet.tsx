@@ -40,7 +40,7 @@ function MethodItem({ icon, iconBg, label, description, onClick }: MethodItemPro
 /**
  * 식비 추가 방식 선택 시트.
  * 라벨에 "장보기 / 외식비"를 드러내야 외식비가 끼어도 무엇을 추가하는지 모호해지지 않는다.
- * 장보기 입구는 하나다. 몇 건인지, 영수증인지는 추가 화면 안에서 고른다.
+ * 장보기 입구는 하나다. 품목이 몇 개인지, 영수증인지는 추가 화면 안에서 고른다.
  */
 export function StoreAddMethodSheet({
   open,
@@ -55,7 +55,7 @@ export function StoreAddMethodSheet({
           icon={<ShoppingBasket className="size-5 text-emerald-600" />}
           iconBg="bg-emerald-50"
           label="장보기 추가"
-          description="한 건이든 여러 건이든, 영수증도 여기서"
+          description="직접 입력하거나 영수증을 찍어요"
           onClick={onGroceryAdd}
         />
         <MethodItem
