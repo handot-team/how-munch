@@ -54,6 +54,10 @@ interface IngredientFormProps {
   onOpenProductNameSearch?: (currentName: string, onSelect: (name: string) => void) => void;
   /** 브랜드 검색 Screen 진입 핸들러 — 선택값은 form brand 필드에 반영된다 */
   onOpenBrandSearch?: (currentBrand: string, onSelect: (brand: string) => void) => void;
+  /** 시안 v7 C안: 담기 화면 품목은 날짜·구매처를 담기 화면에서 정하므로 두 칸을 뺀다 */
+  hideDateStore?: boolean;
+  /** 시안 v7 C안: 가격 없는 품목을 고치러 오면 가격 칸에 커서를 둔다 */
+  autoFocusPrice?: boolean;
 }
 
 /** 담기 목록도 단건 폼과 같은 검사 규칙을 쓰도록 밖에서 꺼내 쓴다. */
@@ -125,6 +129,8 @@ export function IngredientForm({
   householdId = null,
   onOpenProductNameSearch,
   onOpenBrandSearch,
+  hideDateStore = false,
+  autoFocusPrice = false,
 }: IngredientFormProps) {
   const { data: categoryOptions = [] } = useIngredientCategoriesQuery(householdId);
   const categoryIds = useMemo(
@@ -178,22 +184,24 @@ export function IngredientForm({
     >
       {/* 날짜 */}
       <form.Field name="date">
-        {(field) => (
-          <Form.Field field={field}>
-            <Form.Label required>날짜</Form.Label>
-            <Form.Control>
-              <DatePicker
-                value={parseDateValue(field.state.value)}
-                onChange={(date) =>
-                  field.handleChange(date ? format(date, 'yyyy-MM-dd') : field.state.value)
-                }
-                maxDate={today}
-                placeholder="날짜를 선택하세요"
-              />
-            </Form.Control>
-            <Form.Error />
-          </Form.Field>
-        )}
+        {(field) =>
+          hideDateStore ? null : (
+            <Form.Field field={field}>
+              <Form.Label required>날짜</Form.Label>
+              <Form.Control>
+                <DatePicker
+                  value={parseDateValue(field.state.value)}
+                  onChange={(date) =>
+                    field.handleChange(date ? format(date, 'yyyy-MM-dd') : field.state.value)
+                  }
+                  maxDate={today}
+                  placeholder="날짜를 선택하세요"
+                />
+              </Form.Control>
+              <Form.Error />
+            </Form.Field>
+          )
+        }
       </form.Field>
 
       {/* 카테고리 */}
@@ -357,25 +365,27 @@ export function IngredientForm({
 
       {/* 구매처 */}
       <form.Field name="store">
-        {(field) => (
-          <Form.Field field={field}>
-            <Form.Label>구매처</Form.Label>
-            <ComboBox value={field.state.value} onValueChange={field.handleChange}>
-              <Form.Control>
-                <ComboBox.Input placeholder="구매처를 입력하거나 선택하세요" />
-              </Form.Control>
-              <ComboBox.List>
-                <ComboBox.Empty>검색 결과가 없습니다</ComboBox.Empty>
-                {storeNames.map((name) => (
-                  <ComboBox.Item key={name} value={name}>
-                    {name}
-                  </ComboBox.Item>
-                ))}
-              </ComboBox.List>
-            </ComboBox>
-            <Form.Error />
-          </Form.Field>
-        )}
+        {(field) =>
+          hideDateStore ? null : (
+            <Form.Field field={field}>
+              <Form.Label>구매처</Form.Label>
+              <ComboBox value={field.state.value} onValueChange={field.handleChange}>
+                <Form.Control>
+                  <ComboBox.Input placeholder="구매처를 입력하거나 선택하세요" />
+                </Form.Control>
+                <ComboBox.List>
+                  <ComboBox.Empty>검색 결과가 없습니다</ComboBox.Empty>
+                  {storeNames.map((name) => (
+                    <ComboBox.Item key={name} value={name}>
+                      {name}
+                    </ComboBox.Item>
+                  ))}
+                </ComboBox.List>
+              </ComboBox>
+              <Form.Error />
+            </Form.Field>
+          )
+        }
       </form.Field>
 
       {/* 가격 */}
@@ -390,6 +400,7 @@ export function IngredientForm({
                 onChange={field.handleChange}
                 blankWhenZero
                 placeholder="가격"
+                autoFocus={autoFocusPrice}
               />
             </Form.Control>
             <Form.Error />

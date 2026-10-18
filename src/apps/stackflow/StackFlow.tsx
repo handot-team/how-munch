@@ -438,7 +438,7 @@ function PromptIngredientStagingActivity({
     suggestions?: string[];
   };
 }) {
-  const { pop } = useActions();
+  const { pop, push } = useActions();
 
   // 시안 v6: 장보기 담기 화면. 직접 쓰기와 영수증(식비 탭 + 시트에서 고른 사진) 모두 이 화면으로 온다.
   return (
@@ -456,6 +456,16 @@ function PromptIngredientStagingActivity({
           missingPriceLabel={info.missingPriceLabel}
         />
       )}
+      // 시안 v7 C안: 품목 고치기는 시트가 아니라 화면으로 간다.
+      onOpenItemScreen={(item, focus) =>
+        push('PromptIngredientStagingEditActivity', {
+          householdId: params.householdId,
+          userId: params.userId,
+          item,
+          suggestions: params.suggestions ?? [],
+          focus,
+        })
+      }
     />
   );
 }
@@ -468,6 +478,7 @@ function PromptIngredientStagingEditActivity({
     userId: string;
     item: StagedItem;
     suggestions?: string[];
+    focus?: 'price' | null;
   };
 }) {
   const { pop, push } = useActions();
@@ -496,6 +507,7 @@ function PromptIngredientStagingEditActivity({
       onClose={pop}
       item={params.item}
       householdId={params.householdId}
+      focusPrice={params.focus === 'price'}
       onOpenProductNameSearch={openProductNameSearch}
       onOpenBrandSearch={openBrandSearch}
     />

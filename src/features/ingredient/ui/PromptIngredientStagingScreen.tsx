@@ -23,12 +23,16 @@ import {
 import { useIngredientBrandNamesQuery, useStoreNamesQuery } from '../api/queries';
 import { compressReceiptImage } from '../lib/compressReceiptImage';
 import { type StagedItem } from '../lib/parseAiResponse';
+import {
+  setPendingPromptEditCallback,
+  setPendingPromptRemoveCallback,
+} from '../model/promptIngredientEditStore';
 import { type SaveState, usePromptIngredientStore } from '../model/promptIngredientStore';
 import { useReceiptInbox } from '../model/receiptInbox';
 
 import { createIngredientFormSchema } from './IngredientForm';
 import { PlaceChips } from './PlaceChips';
-import { type ItemDraft, StagedItemSheet } from './StagedItemSheet';
+import { type ItemDraft, readSheetVariant, StagedItemSheet } from './StagedItemSheet';
 import { longDate, objectParticle, tone } from './StagingParts';
 
 /** 품목 한 행의 본문. 식비 탭 행(FoodExpenseItem)을 그대로 쓰도록 앱 층에서 넘겨받는다. */
@@ -45,6 +49,8 @@ interface PromptIngredientStagingScreenProps {
   /** 품목명 제안(검색 화면과 같은 목록) */
   suggestions?: string[];
   renderRow?: StagedRowRenderer;
+  /** 시안 v7 C안: 품목을 고칠 때 시트 대신 품목 고치기 화면을 연다 */
+  onOpenItemScreen?: (item: StagedItem, focus: 'price' | null) => void;
 }
 
 type LineResult = { kind: 'success' } | { kind: 'error'; message: string } | { kind: 'unknown' };
@@ -116,6 +122,7 @@ export function PromptIngredientStagingScreen({
   userId,
   suggestions = [],
   renderRow,
+  onOpenItemScreen,
 }: PromptIngredientStagingScreenProps) {
   const {
     items,
@@ -150,6 +157,8 @@ export function PromptIngredientStagingScreen({
   const [lastSheet, setLastSheet] = useState<NonNullable<SheetState>>({ mode: 'add' });
   if (sheet && sheet !== lastSheet) setLastSheet(sheet);
   const [removed, setRemoved] = useState<Removed | null>(null);
+  // 시안 v7: 품목 시트 안(a·b·c). 캡처 스크립트가 localStorage로 고른다.
+  const [sheetVariant] = useState(readSheetVariant);
   const [reading, setReading] = useState(0);
   const pendingReceipts = useReceiptInbox((s) => s.files.length);
 
@@ -366,6 +375,44 @@ export function PromptIngredientStagingScreen({
   }
   const showGroups = rest.some((i) => i.source === 'receipt');
 
+  /** 행을 누르면 품목을 고친다. C안은 시트 대신 품목 고치기 화면으로 간다. */
+  function openEdit(item: StagedItem) {
+    const focus = item.price === 0 ? 'price' : null;
+    if (sheetVariant === 'c' && onOpenItemScreen) {
+      setPendingPromptEditCallback((updates) => saveFromSheet(item.id, updates as ItemDraft));
+      setPendingPromptRemoveCallback(() => removeLine(item));
+      onOpenItemScreen(item, focus);
+      return;
+    }
+    setSheet({ mode: 'edit', id: item.id, focus });
+  }
+
+  /** B·C안 품목 시트 위 "방금 담은 품목" 행. 담기 화면 행과 같은 모양으로 그린다. */
+  function renderAdded(draft: ItemDraft) {
+    const item: StagedItem = {
+      id: 'just-added',
+      ...draft,
+      store: defaults.store,
+      date: defaults.date,
+      category_code: '',
+      source: 'direct',
+    };
+    const cat = resolveCategory(item);
+    return (
+      <div className="text-foreground flex w-full flex-col gap-1 rounded-lg border bg-white px-3 py-2.5 text-left">
+        {renderRow ? (
+          renderRow(item, {
+            categoryLabel: cat.label,
+            categoryEmoji: cat.emoji,
+            missingPriceLabel: '가격 입력',
+          })
+        ) : (
+          <span>{item.name}</span>
+        )}
+      </div>
+    );
+  }
+
   function renderLine(item: StagedItem) {
     const state = stateOf(item);
     const cat = resolveCategory(item);
@@ -376,9 +423,7 @@ export function PromptIngredientStagingScreen({
         type="button"
         data-item-row
         disabled={isSaving}
-        onClick={() =>
-          setSheet({ mode: 'edit', id: item.id, focus: item.price === 0 ? 'price' : null })
-        }
+        onClick={() => openEdit(item)}
         className="text-foreground flex w-full appearance-none flex-col gap-1 rounded-lg border bg-white px-3 py-2.5 text-left"
       >
         {renderRow ? (
@@ -582,6 +627,7 @@ export function PromptIngredientStagingScreen({
 
       <StagedItemSheet
         open={sheet !== null}
+        variant={sheetVariant}
         mode={lastSheet.mode}
         item={editing}
         focus={lastSheet.mode === 'edit' ? lastSheet.focus : 'name'}
@@ -590,6 +636,7 @@ export function PromptIngredientStagingScreen({
         nameOptions={suggestions}
         brandOptions={brandNames}
         basketCount={listItems.length}
+        renderAdded={renderAdded}
         error={editing && stateOf(editing) === 'error' ? errors[editing.id] : undefined}
         onAdd={addFromSheet}
         onSave={saveFromSheet}
