@@ -21,6 +21,8 @@ export interface StagedItem {
   date: string;
   category_code: string;
   category_id: string;
+  /** 담기 목록에서 줄이 어디서 왔는지(직접 입력/영수증). 영수증 파싱 결과는 비워 두고 담을 때 채운다. */
+  source?: 'direct' | 'receipt';
 }
 
 /**

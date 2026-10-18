@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { apiClient } from '@/commons/lib';
 import { type Database } from '@/commons/model/types';
@@ -22,17 +22,20 @@ export function useAddIngredientMutation() {
   return useMutation({
     mutationFn: (input: IngredientInsert & { skipNotification?: boolean }) =>
       apiClient.post<Ingredient>('/api/ingredients', input),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ingredientKeys.all });
-      // 식비 탭은 통합 뷰를 읽으므로 장보기 변경도 함께 무효화해야 즉시 반영된다
-      queryClient.invalidateQueries({ queryKey: foodExpenseKeys.all });
-      // 지출이 바뀌면 예산 소진율과 일자별 시리즈도 같이 낡는다
-      queryClient.invalidateQueries({ queryKey: budgetKeys.all });
-      queryClient.invalidateQueries({ queryKey: fridgeItemKeys.all });
-      // 장보기 추가는 냉장고 품목을 새로 만들거나 기존 품목에 병합하므로 식단 재료 선택 목록도 갱신한다
-      queryClient.invalidateQueries({ queryKey: mealKeys.fridgeItemsAll });
-    },
+    onSuccess: () => invalidateAfterIngredientAdd(queryClient),
   });
+}
+
+/** 장보기 추가 뒤 낡는 조회들. 담기 목록 저장은 끝에 한 번만 부른다. */
+export function invalidateAfterIngredientAdd(queryClient: QueryClient) {
+  queryClient.invalidateQueries({ queryKey: ingredientKeys.all });
+  // 식비 탭은 통합 뷰를 읽으므로 장보기 변경도 함께 무효화해야 즉시 반영된다
+  queryClient.invalidateQueries({ queryKey: foodExpenseKeys.all });
+  // 지출이 바뀌면 예산 소진율과 일자별 시리즈도 같이 낡는다
+  queryClient.invalidateQueries({ queryKey: budgetKeys.all });
+  queryClient.invalidateQueries({ queryKey: fridgeItemKeys.all });
+  // 장보기 추가는 냉장고 품목을 새로 만들거나 기존 품목에 병합하므로 식단 재료 선택 목록도 갱신한다
+  queryClient.invalidateQueries({ queryKey: mealKeys.fridgeItemsAll });
 }
 
 /** 장보기 항목 수정 (I-06) */

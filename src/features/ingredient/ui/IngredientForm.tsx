@@ -56,7 +56,8 @@ interface IngredientFormProps {
   onOpenBrandSearch?: (currentBrand: string, onSelect: (brand: string) => void) => void;
 }
 
-function createIngredientFormSchema(categoryIds: string[]) {
+/** 담기 목록도 단건 폼과 같은 검사 규칙을 쓰도록 밖에서 꺼내 쓴다. */
+export function createIngredientFormSchema(categoryIds: string[]) {
   return z
     .object({
       date: z

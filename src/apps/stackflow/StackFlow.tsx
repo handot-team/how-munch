@@ -102,6 +102,14 @@ function IngredientAddActivity({
       defaultName={params.defaultName}
       onOpenProductNameSearch={openProductNameSearch}
       onOpenBrandSearch={openBrandSearch}
+      onOpenBasket={(autoSave) =>
+        push('PromptIngredientStagingActivity', {
+          householdId: params.householdId,
+          userId: params.userId,
+          suggestions: params.suggestions ?? [],
+          autoSave,
+        })
+      }
     />
   );
 }
@@ -411,6 +419,7 @@ function PromptIngredientStagingActivity({
     householdId: string;
     userId: string;
     suggestions?: string[];
+    autoSave?: boolean;
   };
 }) {
   const { pop, push } = useActions();
@@ -431,6 +440,7 @@ function PromptIngredientStagingActivity({
       householdId={params.householdId}
       userId={params.userId}
       onEditItem={openEdit}
+      autoSave={params.autoSave}
     />
   );
 }

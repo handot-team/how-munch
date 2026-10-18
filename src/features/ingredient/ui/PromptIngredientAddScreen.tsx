@@ -44,7 +44,7 @@ export function PromptIngredientAddScreen({
   householdId,
 }: PromptIngredientAddScreenProps) {
   const reduceMotion = useReducedMotion();
-  const setItems = usePromptIngredientStore((s) => s.setItems);
+  const addItems = usePromptIngredientStore((s) => s.addItems);
   const { data: categories = [] } = useIngredientCategoriesQuery(householdId);
   const parseReceipt = useParseReceiptMutation();
 
@@ -107,7 +107,8 @@ export function PromptIngredientAddScreen({
         categories,
         today: format(new Date(), 'yyyy-MM-dd'),
       });
-      setItems(items);
+      // 영수증 줄은 담기 목록에 더한다(직접 입력으로 담은 줄과 같은 목록).
+      addItems(items.map((item) => ({ ...item, source: 'receipt' as const })));
       onParsed(items);
       resetTimerRef.current = setTimeout(() => {
         setStatus('idle');
