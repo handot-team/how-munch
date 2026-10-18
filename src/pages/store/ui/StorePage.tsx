@@ -4,8 +4,7 @@ import { useState } from 'react';
 
 import { addMonths, endOfMonth, format, startOfMonth, subMonths } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { overlay } from 'overlay-kit';
+import { Camera, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 
 import { stackFlowActions } from '@/apps/stackflow/StackFlow';
 
@@ -23,8 +22,6 @@ import {
   useFoodExpensesQuery,
   useFoodExpenseSuggestionsQuery,
 } from '@/features/food-expense';
-
-import { StoreAddMethodSheet } from './StoreAddMethodSheet';
 
 interface StorePageProps {
   householdId: string;
@@ -58,12 +55,13 @@ export function StorePage({ householdId, userId }: StorePageProps) {
   const handlePrevMonth = () => setCurrentDate((d) => subMonths(d, 1));
   const handleNextMonth = () => setCurrentDate((d) => addMonths(d, 1));
 
-  // 장보기 추가 화면이 곧 담은 목록이다. 직접 입력과 영수증이 한 화면에서 만난다.
-  function openGroceryAdd() {
+  // 두 입구(직접 쓰기, 영수증) 모두 같은 장보기 기록 화면으로 간다. 영수증은 열자마자 영수증 화면을 띄운다.
+  function openGroceryRecord(start?: 'receipt') {
     stackFlowActions.push('PromptIngredientStagingActivity', {
       householdId,
       userId,
       suggestions: grocerySuggestions,
+      ...(start ? { start } : {}),
     });
   }
 
@@ -73,10 +71,6 @@ export function StorePage({ householdId, userId }: StorePageProps) {
 
   function openBudgetEdit() {
     stackFlowActions.push('BudgetEditActivity', { householdId, yearMonth });
-  }
-
-  function openDiningExpenseAdd() {
-    stackFlowActions.push('DiningExpenseAddActivity', { householdId });
   }
 
   function openExpenseEdit(expense: FoodExpense) {
@@ -94,30 +88,6 @@ export function StorePage({ householdId, userId }: StorePageProps) {
     if (diningExpense) {
       stackFlowActions.push('DiningExpenseEditActivity', { householdId, expense: diningExpense });
     }
-  }
-
-  function openAddMethodSheet() {
-    overlay.open(({ isOpen, close, unmount }) => {
-      function closeSheet() {
-        close();
-        window.setTimeout(unmount, 300);
-      }
-
-      return (
-        <StoreAddMethodSheet
-          open={isOpen}
-          onClose={closeSheet}
-          onGroceryAdd={() => {
-            closeSheet();
-            openGroceryAdd();
-          }}
-          onDiningAdd={() => {
-            closeSheet();
-            openDiningExpenseAdd();
-          }}
-        />
-      );
-    });
   }
 
   return (
@@ -161,15 +131,26 @@ export function StorePage({ householdId, userId }: StorePageProps) {
         <FoodExpenseList householdId={householdId} expenses={expenses} onSelect={openExpenseEdit} />
       )}
 
-      {/* FAB 추가 버튼 */}
-      <Button
-        onClick={openAddMethodSheet}
-        color="primary"
-        className="fixed right-4 [bottom:calc(constant(safe-area-inset-bottom)+84px)] [bottom:calc(env(safe-area-inset-bottom)+84px)] z-40 size-12 rounded-full shadow-lg sm:right-[calc(50%-215px+16px)]"
-        size="icon-lg"
-      >
-        <Plus className="size-5" />
-      </Button>
+      {/* 입구 두 칸: 직접 쓰기 | 영수증. 외식비는 장보기 기록 화면 위 세그먼트에서 고른다. */}
+      <div className="fixed right-4 [bottom:calc(constant(safe-area-inset-bottom)+84px)] [bottom:calc(env(safe-area-inset-bottom)+84px)] z-40 flex h-12 overflow-hidden rounded-full bg-emerald-600 text-sm font-semibold text-white shadow-lg sm:right-[calc(50%-215px+16px)]">
+        <button
+          type="button"
+          onClick={() => openGroceryRecord()}
+          className="flex items-center gap-1 pr-3 pl-4 active:bg-emerald-700"
+        >
+          <Plus className="size-4" />
+          직접 쓰기
+        </button>
+        <span className="my-3 w-px bg-white/40" aria-hidden />
+        <button
+          type="button"
+          onClick={() => openGroceryRecord('receipt')}
+          className="flex items-center gap-1 pr-4 pl-3 active:bg-emerald-700"
+        >
+          <Camera className="size-4" />
+          영수증
+        </button>
+      </div>
     </div>
   );
 }

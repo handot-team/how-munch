@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
+
 import { basicUIPlugin } from '@stackflow/plugin-basic-ui';
 import { historySyncPlugin } from '@stackflow/plugin-history-sync';
 import { basicRendererPlugin } from '@stackflow/plugin-renderer-basic';
@@ -408,9 +410,12 @@ function PromptIngredientStagingActivity({
     householdId: string;
     userId: string;
     suggestions?: string[];
+    /** 'receipt'면 화면을 열자마자 영수증 화면을 띄운다(식비 탭의 📷 영수증) */
+    start?: 'receipt';
   };
 }) {
   const { pop, push } = useActions();
+  const startedRef = useRef(false);
 
   function openReceipt() {
     push('PromptIngredientAddActivity', {
@@ -418,6 +423,20 @@ function PromptIngredientStagingActivity({
       userId: params.userId,
       suggestions: params.suggestions ?? [],
     });
+  }
+
+  useEffect(
+    function openReceiptOnStart() {
+      if (params.start !== 'receipt' || startedRef.current) return;
+      startedRef.current = true;
+      openReceipt();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  function openDining() {
+    push('DiningExpenseAddActivity', { householdId: params.householdId });
   }
 
   return (
@@ -428,6 +447,7 @@ function PromptIngredientStagingActivity({
       userId={params.userId}
       suggestions={params.suggestions ?? []}
       onOpenReceipt={openReceipt}
+      onOpenDining={openDining}
     />
   );
 }

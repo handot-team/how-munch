@@ -3,17 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { format } from 'date-fns';
-import {
-  AlertTriangle,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  Loader2,
-  Plus,
-  ScanText,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { AlertTriangle, Camera, Check, ChevronLeft, Loader2, Trash2, X } from 'lucide-react';
 import { AppScreen } from '@stackflow/plugin-basic-ui';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -63,6 +53,8 @@ interface PromptIngredientStagingScreenProps {
   suggestions?: string[];
   /** 영수증 화면 열기. 인식이 끝나면 이 화면으로 돌아와 같은 목록에 품목이 붙는다 */
   onOpenReceipt: () => void;
+  /** 외식 세그먼트. 기존 외식비 입력 화면을 연다 */
+  onOpenDining: () => void;
 }
 
 const rowBg: Record<SaveState, string> = {
@@ -291,9 +283,8 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * 펼친 품목. 두 단계로 펼친다.
- * - 새 품목: 품목명 | 가격과 요약 한 줄("기타 · 1개 · 브랜드 없음 ⌄")만. 요약 줄을 누르면 다 펼친다.
- * - 이미 넣은 품목(접힌 카드를 누름)·실패 품목: 품목명 | 가격, 수량, 분류, 브랜드, 구매처·날짜, 삭제까지 모두.
+ * 펼친 품목. 품목 줄을 누르면 그 자리에서 펼쳐지고, 고칠 칸이 모두 보인다.
+ * 위에서부터 품목명 | 가격, 수량, 분류, 브랜드, 구매처·날짜, 삭제.
  */
 function ExpandedItem({
   item,
@@ -303,12 +294,10 @@ function ExpandedItem({
   storeOptions,
   state,
   error,
-  autoFocusName,
-  detailOpen,
-  onOpenDetail,
+  autoFocusPrice,
   onChange,
   onRemove,
-  onNext,
+  onDone,
 }: {
   item: StagedItem;
   categories: IngredientCategoryOption[];
@@ -317,16 +306,15 @@ function ExpandedItem({
   storeOptions: string[];
   state: SaveState;
   error?: string;
-  autoFocusName: boolean;
-  /** 새 품목은 품목명 | 가격과 요약 한 줄만 보인다(자판이 올라와도 카드가 화면에 들어가게). */
-  detailOpen: boolean;
-  onOpenDetail: () => void;
+  /** 입력줄로 막 담은 품목이면 가격 칸에 커서를 두고 입력줄 바로 위로 스크롤한다 */
+  autoFocusPrice: boolean;
   onChange: (updates: Partial<StagedItem>) => void;
   onRemove: () => void;
-  onNext: () => void;
+  /** 가격 칸 Enter: 접고 입력줄로 돌아간다 */
+  onDone: () => void;
 }) {
   const [placeOpen, setPlaceOpen] = useState(false);
-  const nameRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const priceRef = useRef<HTMLInputElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
 
@@ -345,19 +333,23 @@ function ExpandedItem({
   );
 
   useEffect(
-    function focusNameOnOpen() {
-      if (!autoFocusName) return;
-      const timer = window.setTimeout(() => nameRef.current?.focus(), 80);
+    function focusPriceOnAdd() {
+      if (!autoFocusPrice) return;
+      const timer = window.setTimeout(() => {
+        rootRef.current?.scrollIntoView({ block: 'end' });
+        priceRef.current?.focus({ preventScroll: true });
+      }, 60);
       return () => window.clearTimeout(timer);
     },
-    [autoFocusName, item.id],
+    [autoFocusPrice, item.id],
   );
 
   return (
     <div
+      ref={rootRef}
       data-expanded-item
       className={cn(
-        'flex flex-col gap-3 rounded-xl border-2 border-emerald-500 p-3',
+        'flex scroll-mb-64 flex-col gap-3 rounded-xl border-2 border-emerald-500 p-3',
         state === 'error' ? 'bg-[oklch(0.97_0.03_25)]' : 'bg-white',
       )}
     >
@@ -368,14 +360,13 @@ function ExpandedItem({
           onChange={(name) => onChange({ name })}
           options={nameOptions}
           placeholder="품목명"
-          inputRef={nameRef}
           onEnter={() => priceRef.current?.focus()}
         />
         <PriceField
           value={item.price}
           onChange={(price) => onChange({ price })}
           inputRef={priceRef}
-          onEnter={onNext}
+          onEnter={onDone}
         />
       </div>
 
@@ -385,128 +376,109 @@ function ExpandedItem({
         </span>
       ) : null}
 
-      {detailOpen ? null : (
+      <div className="flex items-center gap-2">
+        <FieldLabel>수량</FieldLabel>
+        <Counter
+          key={`count-${item.unit}`}
+          className="w-36"
+          value={item.count}
+          min={resolveAmountMin(item.unit)}
+          step={resolveAmountStep(item.unit)}
+          onValueChange={(n) => onChange({ count: normalizeAmountByUnit(n, item.unit) })}
+        />
+        <Select
+          value={item.unit}
+          onValueChange={(u) =>
+            onChange({
+              unit: u as IngredientUnit,
+              count: resolveAmountMin(u as IngredientUnit),
+            })
+          }
+        >
+          <Select.Trigger className="w-16">
+            <Select.Value />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="count">개</Select.Item>
+            <Select.Item value="g">g</Select.Item>
+            <Select.Item value="kg">kg</Select.Item>
+            <Select.Item value="ml">ml</Select.Item>
+            <Select.Item value="l">L</Select.Item>
+          </Select.Content>
+        </Select>
+      </div>
+
+      <div ref={chipsRef} className="flex items-center gap-2">
+        <FieldLabel>분류</FieldLabel>
+        <ChipRow className="pb-0">
+          {categories.map((c) => (
+            <Chip
+              key={c.id}
+              selected={c.id === item.category_id}
+              onClick={() => onChange({ category_id: c.id })}
+              className="px-2.5 py-1 text-[13px]"
+            >
+              {c.emoji ? (
+                <span className="font-tossface" aria-hidden>
+                  {c.emoji}
+                </span>
+              ) : null}
+              {c.label}
+            </Chip>
+          ))}
+        </ChipRow>
+      </div>
+
+      <SuggestInput
+        value={item.brand}
+        onChange={(brand) => onChange({ brand })}
+        options={brandOptions}
+        placeholder="브랜드 (선택)"
+      />
+
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between text-sm text-gray-700">
+          <span className="truncate">
+            {item.store || <span className="text-gray-400">구매처 선택</span>} ·{' '}
+            {longDate(item.date)}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPlaceOpen((v) => !v)}
+            className="shrink-0 px-1 py-0.5 text-xs font-medium text-gray-500"
+          >
+            {placeOpen ? '닫기' : '변경'}
+          </button>
+        </div>
+        {placeOpen ? (
+          <div className="flex gap-2">
+            <SuggestInput
+              className="flex-1"
+              value={item.store}
+              onChange={(store) => onChange({ store })}
+              options={storeOptions}
+              placeholder="구매처"
+            />
+            <DatePicker
+              className="flex-1"
+              value={new Date(item.date)}
+              maxDate={new Date()}
+              onChange={(d) => d && onChange({ date: format(d, 'yyyy-MM-dd') })}
+            />
+          </div>
+        ) : null}
+      </div>
+
+      <div className="flex items-center justify-end gap-2 border-t border-gray-100 pt-2">
         <button
           type="button"
-          onClick={onOpenDetail}
-          className="flex items-center gap-1 self-start rounded px-1 py-0.5 text-xs text-gray-500 active:bg-gray-100"
+          onClick={onRemove}
+          className="flex shrink-0 items-center gap-1 px-1 py-0.5 text-xs font-medium text-gray-400"
         >
-          {[
-            categories.find((c) => c.id === item.category_id)?.label ?? '기타',
-            formatIngredientAmount(item.count, item.unit, true),
-            item.brand || '브랜드 없음',
-          ].join(' · ')}
-          <ChevronDown className="size-3.5" />
+          <Trash2 className="size-3.5" />
+          삭제
         </button>
-      )}
-
-      {detailOpen ? (
-        <>
-          <div className="flex items-center gap-2">
-            <FieldLabel>수량</FieldLabel>
-            <Counter
-              key={`count-${item.unit}`}
-              className="w-36"
-              value={item.count}
-              min={resolveAmountMin(item.unit)}
-              step={resolveAmountStep(item.unit)}
-              onValueChange={(n) => onChange({ count: normalizeAmountByUnit(n, item.unit) })}
-            />
-            <Select
-              value={item.unit}
-              onValueChange={(u) =>
-                onChange({
-                  unit: u as IngredientUnit,
-                  count: resolveAmountMin(u as IngredientUnit),
-                })
-              }
-            >
-              <Select.Trigger className="w-16">
-                <Select.Value />
-              </Select.Trigger>
-              <Select.Content>
-                <Select.Item value="count">개</Select.Item>
-                <Select.Item value="g">g</Select.Item>
-                <Select.Item value="kg">kg</Select.Item>
-                <Select.Item value="ml">ml</Select.Item>
-                <Select.Item value="l">L</Select.Item>
-              </Select.Content>
-            </Select>
-          </div>
-
-          <div ref={chipsRef} className="flex items-center gap-2">
-            <FieldLabel>분류</FieldLabel>
-            <ChipRow className="pb-0">
-              {categories.map((c) => (
-                <Chip
-                  key={c.id}
-                  selected={c.id === item.category_id}
-                  onClick={() => onChange({ category_id: c.id })}
-                  className="px-2.5 py-1 text-[13px]"
-                >
-                  {c.emoji ? (
-                    <span className="font-tossface" aria-hidden>
-                      {c.emoji}
-                    </span>
-                  ) : null}
-                  {c.label}
-                </Chip>
-              ))}
-            </ChipRow>
-          </div>
-
-          <SuggestInput
-            value={item.brand}
-            onChange={(brand) => onChange({ brand })}
-            options={brandOptions}
-            placeholder="브랜드 (선택)"
-          />
-
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between text-sm text-gray-700">
-              <span className="truncate">
-                {item.store || <span className="text-gray-400">구매처 선택</span>} ·{' '}
-                {longDate(item.date)}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPlaceOpen((v) => !v)}
-                className="shrink-0 px-1 py-0.5 text-xs font-medium text-gray-500"
-              >
-                {placeOpen ? '닫기' : '변경'}
-              </button>
-            </div>
-            {placeOpen ? (
-              <div className="flex gap-2">
-                <SuggestInput
-                  className="flex-1"
-                  value={item.store}
-                  onChange={(store) => onChange({ store })}
-                  options={storeOptions}
-                  placeholder="구매처"
-                />
-                <DatePicker
-                  className="flex-1"
-                  value={new Date(item.date)}
-                  maxDate={new Date()}
-                  onChange={(d) => d && onChange({ date: format(d, 'yyyy-MM-dd') })}
-                />
-              </div>
-            ) : null}
-          </div>
-
-          <div className="flex items-center justify-end gap-2 border-t border-gray-100 pt-2">
-            <button
-              type="button"
-              onClick={onRemove}
-              className="flex shrink-0 items-center gap-1 px-1 py-0.5 text-xs font-medium text-gray-400"
-            >
-              <Trash2 className="size-3.5" />
-              삭제
-            </button>
-          </div>
-        </>
-      ) : null}
+      </div>
     </div>
   );
 }
@@ -519,10 +491,10 @@ interface Removed {
 }
 
 /**
- * 장보기 추가. 입구는 하나이고, 이 화면이 곧 품목 목록이다.
- * 펼친 품목은 늘 하나, 나머지는 접힌 카드이며 "+ 품목 추가"로 품목을 늘리고 영수증으로 읽은 품목도 같은 목록에 붙는다.
- * 하단 버튼 숫자는 지금 누르면 저장되는 품목 수다. 실패한 품목은 사유와 함께 남아 그것만 다시 저장하고,
- * 응답이 끊긴 품목은 "저장됐는지 확인이 필요해요"로 따로 둔다.
+ * 장보기 기록. 식비 탭의 [직접 쓰기 | 영수증] 두 입구가 모두 이 화면으로 온다.
+ * 품목은 하단 입력줄에서 이름을 치고 Enter(또는 추천 칩)로 목록 맨 아래에 쌓고, 영수증으로 읽은 품목도 같은 목록에 붙는다.
+ * 품목 줄을 누르면 그 자리에서 펼쳐 고친다(펼친 줄은 하나). 하단 버튼 숫자는 지금 누르면 저장되는 품목 수다.
+ * 실패한 품목은 사유와 함께 남아 그것만 다시 저장하고, 응답이 끊긴 품목은 따로 둔다.
  */
 export function PromptIngredientStagingScreen({
   onClose,
@@ -531,6 +503,7 @@ export function PromptIngredientStagingScreen({
   userId,
   suggestions = [],
   onOpenReceipt,
+  onOpenDining,
 }: PromptIngredientStagingScreenProps) {
   const {
     items,
@@ -562,26 +535,23 @@ export function PromptIngredientStagingScreen({
   const [defaultsOpen, setDefaultsOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
-  /** 펼친 품목이 새 품목이라 요약 한 줄만 보이는지 */
-  const [compact, setCompact] = useState(true);
   const [removed, setRemoved] = useState<Removed | null>(null);
+  const [draft, setDraft] = useState('');
+  const barRef = useRef<HTMLInputElement>(null);
 
-  // 처음 열면 빈 품목 하나를 펴 두고 품목명에 커서를 둔다. 지난번에 비워 둔 품목은 치운다.
-  useEffect(
-    function openFirstLine() {
-      if (categories.length === 0 || expandedId) return;
-      const store = usePromptIngredientStore.getState();
-      const blanks = store.items.filter(isBlank).map((i) => i.id);
-      if (blanks.length > 0) store.removeItems(blanks);
-      const line = newLine(defaults, defaultCategoryId);
-      store.addItems([line]);
-      setExpandedId(line.id);
-      setCompact(true);
-      setFocusId(line.id);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [categories.length],
-  );
+  const uniqueSuggestions = useMemo(() => [...new Set(suggestions)], [suggestions]);
+  const { exact, similar } = useSearchFilter(uniqueSuggestions, draft, getNameTexts);
+  const query = draft.trim();
+  const chips = query
+    ? [...new Set([...exact.filter((n) => n !== query), ...similar])].slice(0, 6)
+    : [];
+
+  // 지난번에 이름 없이 남은 품목은 치운다.
+  useEffect(function dropBlankItems() {
+    const store = usePromptIngredientStore.getState();
+    const blanks = store.items.filter(isBlank).map((i) => i.id);
+    if (blanks.length > 0) store.removeItems(blanks);
+  }, []);
 
   // 되돌리기 안내는 5초 뒤 사라진다.
   useEffect(
@@ -614,7 +584,6 @@ export function PromptIngredientStagingScreen({
     return issue.message;
   }
 
-  // 품목명이 빈 품목은 사유 없이 빠진다(아직 쓰는 중인 새 품목).
   const targets = listItems.filter(
     (i) => !isBlank(i) && stateOf(i) !== 'success' && !invalidReason(i),
   );
@@ -635,7 +604,7 @@ export function PromptIngredientStagingScreen({
     return item.store !== defaults.store || item.date !== defaults.date;
   }
 
-  /** 펼친 품목을 접는다. 아무것도 안 쓴 품목은 접지 않고 치운다. */
+  /** 펼친 품목을 접는다. 이름을 지운 품목은 접지 않고 치운다. */
   function collapseCurrent() {
     if (expanded && isBlank(expanded)) removeItems([expanded.id]);
     setExpandedId(null);
@@ -645,26 +614,26 @@ export function PromptIngredientStagingScreen({
     if (isSaving || item.id === expandedId) return;
     collapseCurrent();
     setExpandedId(item.id);
-    setCompact(false);
     setFocusId(null);
   }
 
-  function addLine() {
-    if (isSaving) return;
-    // 품목명이 빈 품목이 펼쳐져 있으면 새로 만들지 않고 그 칸으로 돌려보낸다.
-    if (expanded && isBlank(expanded)) {
-      setFocusId(null);
-      window.setTimeout(() => setFocusId(expanded.id), 0);
-      return;
-    }
-    // 날짜·구매처·분류는 앞 품목 값을 이어받는다. 맨 위 기본값도 그 값으로 따라간다.
-    const next = expanded ? { date: expanded.date, store: expanded.store } : defaults;
-    setDefaults(next);
-    const line = newLine(next, expanded?.category_id ?? defaultCategoryId);
+  /** 입력줄의 이름으로 목록 맨 아래에 품목을 만들고 펼쳐 가격 칸에 커서를 둔다. 추천에 없는 이름도 담는다. */
+  function addByName(name: string) {
+    const trimmed = name.trim();
+    if (isSaving || !trimmed) return;
+    collapseCurrent();
+    const line = { ...newLine(defaults, defaultCategoryId), name: trimmed };
     addItems([line]);
     setExpandedId(line.id);
-    setCompact(true);
     setFocusId(line.id);
+    setDraft('');
+  }
+
+  /** 가격 칸 Enter: 접고 입력줄로 돌아간다. */
+  function finishItem() {
+    collapseCurrent();
+    setFocusId(null);
+    barRef.current?.focus();
   }
 
   function removeLine(item: StagedItem) {
@@ -698,10 +667,6 @@ export function PromptIngredientStagingScreen({
   }
 
   function changeDefaults(updates: Partial<LineDefaults>) {
-    // 펼친 새 품목이 기본값을 쓰고 있으면 같이 바꾼다.
-    if (expanded && expanded.source === 'direct' && !differsFromDefaults(expanded)) {
-      updateItem(expanded.id, updates);
-    }
     setDefaults({ ...defaults, ...updates });
   }
 
@@ -746,31 +711,34 @@ export function PromptIngredientStagingScreen({
     if (problemCount === 0 && leftover.length === 0) {
       const savedTotal = usePromptIngredientStore.getState().lastSavedCount + successNames.length;
       reset();
-      Toast.success(`품목 ${savedTotal}개를 저장했어요`);
+      Toast.success(`${savedTotal}개 저장했어요 · 가구원에게 알렸어요`);
       onComplete();
       return;
     }
-    // 저장된 품목과 빈 품목은 목록에서 빼고, 남은 품목(실패, 확인 필요, 아직 안 고친 품목)만 접어서 둔다.
+    // 저장된 품목과 빈 품목은 목록에서 빼고, 남은 품목(실패, 확인 필요, 아직 안 고친 품목)만 둔다.
     removeItems([...successIds, ...blankIds]);
     addSavedCount(successNames.length);
     // 실패한 품목은 펼쳐서 사유와 고칠 칸을 바로 보인다.
-    const firstFailed = usePromptIngredientStore
-      .getState()
-      .items.find((i) => usePromptIngredientStore.getState().saveStates[i.id] === 'error');
+    const after = usePromptIngredientStore.getState();
+    const firstFailed = after.items.find((i) => after.saveStates[i.id] === 'error');
     setExpandedId(firstFailed?.id ?? null);
-    setCompact(false);
     setFocusId(null);
   }
 
-  let ctaLabel = targets.length > 0 ? `품목 ${targets.length}개 저장하기` : '저장';
+  const skippedNote =
+    priceless.length === skipped.length
+      ? `가격 없는 ${priceless.length}개는 빠져요`
+      : `${skipped.length}개는 빠져요`;
+
+  let ctaLabel = targets.length > 0 ? `${targets.length}개 저장` : '저장';
   if (isSaving) ctaLabel = `저장 중... (${doneCount}/${targets.length})`;
-  else if (isRetry) ctaLabel = `실패한 ${targets.length}개 다시 저장하기`;
+  else if (isRetry) ctaLabel = `실패한 ${targets.length}개 다시 저장`;
 
   return (
     <AppScreen
       className="pointer-events-auto"
       appBar={{
-        title: '장보기 추가',
+        title: '장보기 기록',
         backButton: {
           render: () => (
             <Button
@@ -787,12 +755,22 @@ export function PromptIngredientStagingScreen({
         },
       }}
     >
-      <div className="flex flex-col gap-2 px-4 pt-3 pb-40">
+      <div className="flex flex-col gap-2 px-4 pt-3 pb-64">
+        {/* 장보기 | 외식. 외식은 기존 외식비 입력 화면을 연다. */}
+        <div className="grid grid-cols-2 rounded-lg bg-gray-100 p-1 text-sm font-semibold">
+          <span className="rounded-md bg-white py-2 text-center text-gray-900 shadow-sm">
+            장보기
+          </span>
+          <button type="button" onClick={onOpenDining} className="rounded-md py-2 text-gray-500">
+            외식
+          </button>
+        </div>
+
         {/* 새 품목 기본값. 값은 품목마다 두고, 여기서는 새 품목에 들어갈 값을 보여 주고 고친다. */}
         <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5">
           <span className="text-sm font-medium text-gray-800">
-            {longDate(defaults.date)} ·{' '}
-            {defaults.store || <span className="text-gray-400">구매처 선택</span>}
+            {defaults.store || <span className="text-gray-400">구매처 선택</span>} ·{' '}
+            {longDate(defaults.date)}
           </span>
           <button
             type="button"
@@ -804,18 +782,18 @@ export function PromptIngredientStagingScreen({
         </div>
         {defaultsOpen ? (
           <div className="flex gap-2 rounded-lg border border-gray-100 p-2">
-            <DatePicker
-              className="flex-1"
-              value={new Date(defaults.date)}
-              maxDate={new Date()}
-              onChange={(d) => d && changeDefaults({ date: format(d, 'yyyy-MM-dd') })}
-            />
             <SuggestInput
               className="flex-1"
               value={defaults.store}
               onChange={(store) => changeDefaults({ store })}
               options={storeNames}
               placeholder="구매처"
+            />
+            <DatePicker
+              className="flex-1"
+              value={new Date(defaults.date)}
+              maxDate={new Date()}
+              onChange={(d) => d && changeDefaults({ date: format(d, 'yyyy-MM-dd') })}
             />
           </div>
         ) : null}
@@ -872,6 +850,10 @@ export function PromptIngredientStagingScreen({
           </div>
         ) : null}
 
+        {listItems.length === 0 && unknownItems.length === 0 ? (
+          <p className="py-16 text-center text-sm text-gray-400">아직 담은 품목이 없어요</p>
+        ) : null}
+
         {listItems.map((item) => {
           const state = stateOf(item);
           if (item.id === expandedId) {
@@ -885,12 +867,10 @@ export function PromptIngredientStagingScreen({
                 storeOptions={storeNames}
                 state={state}
                 error={errors[item.id]}
-                autoFocusName={focusId === item.id}
-                detailOpen={!compact || state === 'error'}
-                onOpenDetail={() => setCompact(false)}
+                autoFocusPrice={focusId === item.id}
                 onChange={(updates) => updateItem(item.id, updates)}
                 onRemove={() => removeLine(item)}
-                onNext={addLine}
+                onDone={finishItem}
               />
             );
           }
@@ -909,6 +889,7 @@ export function PromptIngredientStagingScreen({
             <button
               key={item.id}
               type="button"
+              data-item-row
               onClick={() => expandLine(item)}
               disabled={isSaving}
               className={cn(
@@ -950,27 +931,9 @@ export function PromptIngredientStagingScreen({
             </button>
           );
         })}
-
-        <button
-          type="button"
-          onClick={addLine}
-          disabled={isSaving}
-          className="flex h-12 items-center justify-center gap-1 rounded-xl border border-dashed border-gray-300 text-sm font-semibold text-emerald-600 active:bg-gray-50"
-        >
-          <Plus className="size-4" />
-          품목 추가
-        </button>
-        <button
-          type="button"
-          onClick={openReceipt}
-          disabled={isSaving}
-          className="flex items-center justify-center gap-1.5 self-center px-2 py-2 text-sm text-gray-500"
-        >
-          <ScanText className="size-4" />
-          영수증으로 추가
-        </button>
       </div>
 
+      {/* 하단 고정: 되돌리기 → 추천 칩 → 입력줄 → 합계 줄 → 저장 */}
       <div className="safe-area-padding-bottom fixed right-0 bottom-0 left-0 z-[var(--z-cta)] bg-white px-4 pt-2 pb-3 shadow-[0_-8px_16px_-8px_rgba(0,0,0,0.06)]">
         <div className="mx-auto flex w-full max-w-[480px] flex-col gap-2">
           {removed ? (
@@ -988,18 +951,62 @@ export function PromptIngredientStagingScreen({
               </button>
             </div>
           ) : null}
-          {(targets.length > 0 || skipped.length > 0) && !isSaving ? (
+          {chips.length > 0 ? (
+            <ChipRow className="pb-0">
+              {chips.map((name) => (
+                <Chip
+                  key={name}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => addByName(name)}
+                  className="px-3 py-1 text-[13px]"
+                >
+                  {name}
+                </Chip>
+              ))}
+            </ChipRow>
+          ) : null}
+          <div className="flex items-center gap-2">
+            <Input
+              ref={barRef}
+              value={draft}
+              placeholder="품목 이름 (예: 우유)"
+              onChange={(e) => setDraft(e.target.value)}
+              onFocus={() => collapseCurrent()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  addByName(draft);
+                }
+              }}
+              enterKeyHint="done"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              disabled={isSaving}
+              className="flex-1"
+            />
+            <button
+              type="button"
+              onClick={openReceipt}
+              disabled={isSaving}
+              className="flex h-10 shrink-0 items-center gap-1 rounded-lg border border-gray-200 px-2.5 text-sm text-gray-600 active:bg-gray-50"
+            >
+              <Camera className="size-4" />
+              영수증
+            </button>
+          </div>
+          {!isSaving && (targets.length > 0 || skipped.length > 0) ? (
             <div className="flex items-center justify-between gap-2 px-1 text-xs">
-              <span className="text-gray-500">
+              <span className="shrink-0 font-medium text-gray-700">
                 {targets.length > 0 ? `합계 ${total.toLocaleString()}원` : null}
               </span>
               {skipped.length > 0 ? (
-                <span className="font-medium text-orange-500">
-                  {priceless.length === skipped.length
-                    ? `가격 없는 ${priceless.length}개는 저장에서 빠져요`
-                    : `${skipped.length}개는 저장에서 빠져요`}
+                <span className="truncate font-medium text-orange-500">{skippedNote}</span>
+              ) : (
+                <span className="truncate text-[11px] text-gray-400">
+                  저장하면 가구원에게 알림이 한 번 가요
                 </span>
-              ) : null}
+              )}
             </div>
           ) : null}
           <CTAPrimitive
