@@ -73,16 +73,54 @@ function resolveClaims(request) {
  * @description DB와 스키마 캐시를 받아 MSW 핸들러 목록을 만든다.
  */
 export function createHandlers({ db, schema }) {
+  // 다건 저장 시험용 실패 스위치. 장보기 저장(add_ingredient_with_fridge)에서 품목명이 맞는 줄에 한 번만 건다.
+  // - reject: 저장하지 않고 제약 위반(23514)으로 거절한다. 앱에는 도메인 오류 문구(CMN_004)로 온다.
+  // - drop: 저장은 하고 응답만 끊는다(504). 앱은 저장 여부를 모른다.
+  let failSwitch = null;
+  // 알림 요청 기록. 묶음 알림이 몇 번 갔는지 시험 출력에 쓴다.
+  const notifyLog = [];
+
   return [
+    http.post('*/mock/switch', async ({ request }) => {
+      const body = await request.json().catch(() => ({}));
+      failSwitch = body.mode === 'reject' || body.mode === 'drop' ? body : null;
+      return HttpResponse.json({ failSwitch });
+    }),
+    http.get('*/mock/log', () => HttpResponse.json({ notifyLog, failSwitch })),
+
     http.all('*/auth/v1/*', async ({ request }) => toResponse(await handleAuth({ db, request }))),
+
+    http.post('*/rest/v1/rpc/add_ingredient_with_fridge', async ({ request }) => {
+      if (!failSwitch) return undefined;
+      const body = await request.clone().json();
+      if (body.p_name !== failSwitch.name) return undefined;
+      const { mode } = failSwitch;
+      failSwitch = null;
+      if (mode === 'reject') {
+        return HttpResponse.json(
+          { code: '23514', message: 'mock reject', hint: null, details: null },
+          { status: 400 },
+        );
+      }
+      const claims = resolveClaims(request);
+      await handlePostgrest({ db, schema, claims, request });
+      return HttpResponse.json({ message: 'mock drop: upstream timeout' }, { status: 504 });
+    }),
 
     http.all('*/rest/v1/*', async ({ request }) => {
       const claims = resolveClaims(request);
       return toResponse(await handlePostgrest({ db, schema, claims, request }));
     }),
 
-    // Edge Function(푸시 발송)은 받기만 하고 보내지 않는다.
-    http.all('*/functions/v1/*', () => HttpResponse.json({ ok: true, mocked: true })),
+    // Edge Function(푸시 발송)은 받기만 하고 보내지 않는다. 종류만 기록한다.
+    http.all('*/functions/v1/*', async ({ request }) => {
+      const body = await request
+        .clone()
+        .json()
+        .catch(() => ({}));
+      notifyLog.push({ path: new URL(request.url).pathname, type: body.type ?? null });
+      return HttpResponse.json({ ok: true, mocked: true });
+    }),
 
     http.post('*/anthropic/v1/messages', () =>
       HttpResponse.json({
